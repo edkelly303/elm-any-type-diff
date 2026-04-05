@@ -40,6 +40,7 @@ import Set exposing (Set)
 type Differ input output
     = Differ
         { index : Int
+        , default : input
         , diff : input -> input -> Diff input
         , patch : Diff input -> input -> Maybe output
         }
@@ -69,13 +70,13 @@ type alias DictDiff =
 dict :
     { keyToString : comparable -> String
     , keyFromString : String -> Maybe comparable
-    , zero : v
     }
     -> Differ v v
     -> Differ (Dict comparable v) (Dict comparable v)
-dict { keyToString, keyFromString, zero } (Differ value) =
+dict { keyToString, keyFromString } (Differ value) =
     Differ
         { index = 0
+        , default = Dict.empty
         , diff =
             \v1 v2 ->
                 Diff
@@ -115,7 +116,7 @@ dict { keyToString, keyFromString, zero } (Differ value) =
                                                                 value.patch (Diff v) v1_
 
                                                             Nothing ->
-                                                                value.patch (Diff v) zero
+                                                                value.patch (Diff v) value.default
                                                     )
                                                     out
 
@@ -178,6 +179,7 @@ unit : Differ () ()
 unit =
     Differ
         { index = 0
+        , default = ()
         , diff =
             \_ _ ->
                 Diff UnitV
@@ -196,6 +198,7 @@ bool : Differ Bool Bool
 bool =
     Differ
         { index = 0
+        , default = True
         , diff =
             \v1 v2 ->
                 Diff
@@ -223,6 +226,7 @@ char : Differ Char Char
 char =
     Differ
         { index = 0
+        , default = ' '
         , diff =
             \v1 v2 ->
                 Diff
@@ -250,6 +254,7 @@ float : Differ Float Float
 float =
     Differ
         { index = 0
+        , default = 0
         , diff =
             \v1 v2 ->
                 Diff
@@ -277,6 +282,7 @@ int : Differ Int Int
 int =
     Differ
         { index = 0
+        , default = 0
         , diff =
             \v1 v2 ->
                 Diff
@@ -304,6 +310,7 @@ string : Differ String String
 string =
     Differ
         { index = 0
+        , default = ""
         , diff =
             \s1 s2 ->
                 Diff
@@ -335,6 +342,7 @@ pure : output -> Differ input output
 pure v =
     Differ
         { index = 0
+        , default = v
         , diff =
             \_ _ ->
                 Diff (ProductV [])
@@ -348,6 +356,7 @@ andMap : (input -> field) -> Differ field field -> Differ input (field -> output
 andMap getter (Differ this) (Differ prev) =
     Differ
         { index = prev.index + 1
+        , default = prev.default 
         , diff =
             \v1 v2 ->
                 let
