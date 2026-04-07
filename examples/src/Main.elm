@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Dict
 import Differ
 import Html as H
 
@@ -32,28 +33,51 @@ type alias User =
     }
 
 
-u1 : User
+u1 : Dict.Dict String User
 u1 =
-    { name = "Ed", isCool = { really = True } }
+    Dict.fromList
+        [ ( "Ed1", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed2", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed3", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed4", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed5", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed6", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed7", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed8", { name = "Ed", isCool = { really = True } } )
+        ]
 
 
-u2 : User
+u2 : Dict.Dict String User
 u2 =
-    { name = "Ed", isCool = { really = False } }
+    Dict.fromList
+        [ ( "Ed1", { name = "Ed", isCool = { really = False } } )
+        , ( "Rebecca", { name = "Rebecca", isCool = { really = True } } )
+        , ( "Ed2", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed3", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed4", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed5", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed6", { name = "Ed", isCool = { really = True } } )
+        , ( "Ed7", { name = "Ed", isCool = { really = True } } )
+        ]
 
 
-userDiffer : Differ.Differ { a | isCool : { really : Bool }, name : String } User
+userDictDiffer : Differ.Differ (Dict.Dict String User) (Dict.Dict String User)
+userDictDiffer =
+    Differ.dict { keyToString = identity, keyFromString = Just } userDiffer
+
+
+userDiffer : Differ.Differ User User
 userDiffer =
     Differ.pure User
         |> Differ.andMap .name Differ.string
         |> Differ.andMap .isCool (Differ.map .really (\r -> { really = r }) Differ.bool)
 
 
-myDiff : Differ.Diff { isCool : { really : Bool }, name : String }
+myDiff : Differ.Diff (Dict.Dict String User)
 myDiff =
-    Differ.run userDiffer u1 u2
+    Differ.run userDictDiffer u1 u2
 
 
-output : Maybe User
+output : Maybe (Dict.Dict String User)
 output =
-    Differ.patch userDiffer myDiff u1
+    Differ.patch userDictDiffer myDiff u1

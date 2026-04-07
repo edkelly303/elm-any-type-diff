@@ -1,23 +1,8 @@
 module Differ exposing
-    ( Diff
-    , Differ
-    , andMap
-    , bool
-    , char
-    , float
-    , int
-    , map
-    , patch
-    , pure
-    , run
-    , string
-    , unit
+    ( Differ, Diff, run, patch
+    , unit, bool, int, float, char, string, dict
+    , pure, map, andMap
     )
-
-import Dict exposing (Dict)
-import Dict.Extra
-import Set exposing (Set)
-
 
 {-|
 
@@ -29,7 +14,7 @@ import Set exposing (Set)
 
 # Primitive differs
 
-@docs unit, bool, int, float, char, string
+@docs unit, bool, int, float, char, string, dict
 
 
 # Composing differs
@@ -37,10 +22,15 @@ import Set exposing (Set)
 @docs pure, map, andMap
 
 -}
+
+import Dict exposing (Dict)
+import Set exposing (Set)
+
+
 type Differ input output
     = Differ
         { index : Int
-        , default : input
+        , default : output
         , diff : input -> input -> Diff input
         , patch : Diff input -> input -> Maybe output
         }
@@ -67,97 +57,7 @@ type alias DictDiff =
     }
 
 
-dict :
-    { keyToString : comparable -> String
-    , keyFromString : String -> Maybe comparable
-    }
-    -> Differ v v
-    -> Differ (Dict comparable v) (Dict comparable v)
-dict { keyToString, keyFromString } (Differ value) =
-    Differ
-        { index = 0
-        , default = Dict.empty
-        , diff =
-            \v1 v2 ->
-                Diff
-                    (if v1 == v2 then
-                        ProductV []
 
-                     else
-                        DictV { insertions = Dict.empty, deletions = Set.empty }
-                    )
-        , patch =
-            \(Diff d) v1 ->
-                case d of
-                    DictV { insertions, deletions } ->
-                        let
-                            dels =
-                                Set.foldl
-                                    (\k out ->
-                                        case keyFromString k of
-                                            Just comparableK ->
-                                                Dict.remove comparableK out
-
-                                            Nothing ->
-                                                out
-                                    )
-                                    v1
-                                    deletions
-
-                            ins =
-                                Dict.foldl
-                                    (\k v out ->
-                                        case keyFromString k of
-                                            Just comparableK ->
-                                                Dict.update comparableK
-                                                    (\maybeV1 ->
-                                                        case maybeV1 of
-                                                            Just v1_ ->
-                                                                value.patch (Diff v) v1_
-
-                                                            Nothing ->
-                                                                value.patch (Diff v) value.default
-                                                    )
-                                                    out
-
-                                            Nothing ->
-                                                out
-                                    )
-                                    dels
-                                    insertions
-                        in
-                        Just ins
-
-                    ProductV [] ->
-                        Just v1
-
-                    _ ->
-                        Nothing
-        }
-
-
-emptyDictDiff : DictDiff
-emptyDictDiff =
-    { insertions = Dict.empty
-    , deletions = Set.empty
-    }
-
-
-
--- fromDict : Dict comparable item -> Dict comparable item -> DictDiff
--- fromDict d1 d2 =
---     Dict.merge
---         (\id _ output -> { output | deletions = Set.insert id output.deletions })
---         (\id old new output ->
---             if old /= new then
---                 { output | insertions = Dict.insert id new output.insertions }
---             else
---                 output
---         )
---         (\id new output -> { output | insertions = Dict.insert id new output.insertions })
---         d1
---         d2
---         emptyDictDiff
 -- Use
 
 
@@ -334,6 +234,98 @@ string =
         }
 
 
+dict :
+    { keyToString : comparable -> String
+    , keyFromString : String -> Maybe comparable
+    }
+    -> Differ v v
+    -> Differ (Dict comparable v) (Dict comparable v)
+dict { keyToString, keyFromString } (Differ valueDiffer) =
+    Differ
+        { index = 0
+        , default = Dict.empty
+        , diff =
+            \oldDict newDict ->
+                Diff
+                    (if oldDict == newDict then
+                        ProductV []
+
+                     else
+                        Dict.merge
+                            (\k _ out -> { out | deletions = Set.insert (keyToString k) out.deletions })
+                            (\k oldValue newValue out ->
+                                let
+                                    (Diff valueDiff) =
+                                        valueDiffer.diff oldValue newValue
+                                in
+                                if valueDiff == ProductV [] then
+                                    out
+
+                                else
+                                    { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
+                            )
+                            (\k newValue out ->
+                                let
+                                    (Diff valueDiff) =
+                                        valueDiffer.diff valueDiffer.default newValue
+                                in
+                                { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
+                            )
+                            oldDict
+                            newDict
+                            { insertions = Dict.empty, deletions = Set.empty }
+                            |> DictV
+                    )
+        , patch =
+            \(Diff d) oldDict ->
+                case d of
+                    DictV { insertions, deletions } ->
+                        let
+                            newDictAfterDeletions =
+                                Set.foldl
+                                    (\k out ->
+                                        case keyFromString k of
+                                            Just comparableK ->
+                                                Dict.remove comparableK out
+
+                                            Nothing ->
+                                                out
+                                    )
+                                    oldDict
+                                    deletions
+
+                            newDictAfterDeletionsAndInsertions =
+                                Dict.foldl
+                                    (\k v out ->
+                                        case keyFromString k of
+                                            Just comparableK ->
+                                                Dict.update comparableK
+                                                    (\maybeV1 ->
+                                                        case maybeV1 of
+                                                            Just v1_ ->
+                                                                valueDiffer.patch (Diff v) v1_
+
+                                                            Nothing ->
+                                                                valueDiffer.patch (Diff v) valueDiffer.default
+                                                    )
+                                                    out
+
+                                            Nothing ->
+                                                out
+                                    )
+                                    newDictAfterDeletions
+                                    insertions
+                        in
+                        Just newDictAfterDeletionsAndInsertions
+
+                    ProductV [] ->
+                        Just oldDict
+
+                    _ ->
+                        Nothing
+        }
+
+
 
 -- Composition
 
@@ -356,7 +348,7 @@ andMap : (input -> field) -> Differ field field -> Differ input (field -> output
 andMap getter (Differ this) (Differ prev) =
     Differ
         { index = prev.index + 1
-        , default = prev.default 
+        , default = prev.default this.default
         , diff =
             \v1 v2 ->
                 let
