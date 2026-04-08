@@ -31,8 +31,8 @@ type Differ input output
     = Differ
         { index : Int
         , default : output
-        , diff : input -> input -> Diff input
-        , patch : Diff input -> input -> Maybe output
+        , diff : input -> input -> Value
+        , patch : Value -> input -> Maybe output
         }
 
 
@@ -63,12 +63,12 @@ type alias DictDiff =
 
 run : Differ input output -> input -> input -> Diff input
 run (Differ differ) v1 v2 =
-    differ.diff v1 v2
+    Diff (differ.diff v1 v2)
 
 
 patch : Differ input output -> Diff input -> input -> Maybe output
-patch (Differ differ) d v1 =
-    differ.patch d v1
+patch (Differ differ) (Diff diff) v1 =
+    differ.patch diff v1
 
 
 
@@ -82,9 +82,9 @@ unit =
         , default = ()
         , diff =
             \_ _ ->
-                Diff UnitV
+                UnitV
         , patch =
-            \(Diff d) _ ->
+            \d _ ->
                 case d of
                     UnitV ->
                         Just ()
@@ -101,15 +101,13 @@ bool =
         , default = True
         , diff =
             \v1 v2 ->
-                Diff
-                    (if v1 == v2 then
-                        ProductV []
+                if v1 == v2 then
+                    ProductV []
 
-                     else
-                        BoolV v2
-                    )
+                else
+                    BoolV v2
         , patch =
-            \(Diff d) v1 ->
+            \d v1 ->
                 case d of
                     BoolV v2 ->
                         Just v2
@@ -129,15 +127,13 @@ char =
         , default = ' '
         , diff =
             \v1 v2 ->
-                Diff
-                    (if v1 == v2 then
-                        ProductV []
+                if v1 == v2 then
+                    ProductV []
 
-                     else
-                        CharV v2
-                    )
+                else
+                    CharV v2
         , patch =
-            \(Diff d) v1 ->
+            \d v1 ->
                 case d of
                     CharV v2 ->
                         Just v2
@@ -157,15 +153,13 @@ float =
         , default = 0
         , diff =
             \v1 v2 ->
-                Diff
-                    (if v1 == v2 then
-                        ProductV []
+                if v1 == v2 then
+                    ProductV []
 
-                     else
-                        FloatV v2
-                    )
+                else
+                    FloatV v2
         , patch =
-            \(Diff d) v1 ->
+            \d v1 ->
                 case d of
                     FloatV v2 ->
                         Just v2
@@ -185,15 +179,13 @@ int =
         , default = 0
         , diff =
             \v1 v2 ->
-                Diff
-                    (if v1 == v2 then
-                        ProductV []
+                if v1 == v2 then
+                    ProductV []
 
-                     else
-                        IntV v2
-                    )
+                else
+                    IntV v2
         , patch =
-            \(Diff d) v1 ->
+            \d v1 ->
                 case d of
                     IntV v2 ->
                         Just v2
@@ -213,15 +205,13 @@ string =
         , default = ""
         , diff =
             \s1 s2 ->
-                Diff
-                    (if s1 == s2 then
-                        ProductV []
+                if s1 == s2 then
+                    ProductV []
 
-                     else
-                        StringV s2
-                    )
+                else
+                    StringV s2
         , patch =
-            \(Diff d) s1 ->
+            \d s1 ->
                 case d of
                     StringV s2 ->
                         Just s2
@@ -246,38 +236,36 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
         , default = Dict.empty
         , diff =
             \oldDict newDict ->
-                Diff
-                    (if oldDict == newDict then
-                        ProductV []
+                if oldDict == newDict then
+                    ProductV []
 
-                     else
-                        Dict.merge
-                            (\k _ out -> { out | deletions = Set.insert (keyToString k) out.deletions })
-                            (\k oldValue newValue out ->
-                                let
-                                    (Diff valueDiff) =
-                                        valueDiffer.diff oldValue newValue
-                                in
-                                if valueDiff == ProductV [] then
-                                    out
+                else
+                    Dict.merge
+                        (\k _ out -> { out | deletions = Set.insert (keyToString k) out.deletions })
+                        (\k oldValue newValue out ->
+                            let
+                                valueDiff =
+                                    valueDiffer.diff oldValue newValue
+                            in
+                            if valueDiff == ProductV [] then
+                                out
 
-                                else
-                                    { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
-                            )
-                            (\k newValue out ->
-                                let
-                                    (Diff valueDiff) =
-                                        valueDiffer.diff valueDiffer.default newValue
-                                in
+                            else
                                 { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
-                            )
-                            oldDict
-                            newDict
-                            { insertions = Dict.empty, deletions = Set.empty }
-                            |> DictV
-                    )
+                        )
+                        (\k newValue out ->
+                            let
+                                valueDiff =
+                                    valueDiffer.diff valueDiffer.default newValue
+                            in
+                            { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
+                        )
+                        oldDict
+                        newDict
+                        { insertions = Dict.empty, deletions = Set.empty }
+                        |> DictV
         , patch =
-            \(Diff d) oldDict ->
+            \d oldDict ->
                 case d of
                     DictV { insertions, deletions } ->
                         let
@@ -303,10 +291,10 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
                                                     (\maybeV1 ->
                                                         case maybeV1 of
                                                             Just v1_ ->
-                                                                valueDiffer.patch (Diff v) v1_
+                                                                valueDiffer.patch v v1_
 
                                                             Nothing ->
-                                                                valueDiffer.patch (Diff v) valueDiffer.default
+                                                                valueDiffer.patch v valueDiffer.default
                                                     )
                                                     out
 
@@ -337,7 +325,7 @@ pure v =
         , default = v
         , diff =
             \_ _ ->
-                Diff (ProductV [])
+                ProductV []
         , patch =
             \_ _ ->
                 Just v
@@ -352,26 +340,24 @@ andMap getter (Differ this) (Differ prev) =
         , diff =
             \v1 v2 ->
                 let
-                    (Diff thisValue) =
+                    thisValue =
                         this.diff (getter v1) (getter v2)
 
-                    (Diff prevValue) =
+                    prevValue =
                         prev.diff v1 v2
                 in
-                Diff
-                    (if thisValue == ProductV [] then
-                        prevValue
+                if thisValue == ProductV [] then
+                    prevValue
 
-                     else
-                        case prevValue of
-                            ProductV prevValues ->
-                                ProductV (( prev.index + 1, thisValue ) :: prevValues)
+                else
+                    case prevValue of
+                        ProductV prevValues ->
+                            ProductV (( prev.index + 1, thisValue ) :: prevValues)
 
-                            _ ->
-                                ProductV [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
-                    )
+                        _ ->
+                            ProductV [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
         , patch =
-            \(Diff d) v1 ->
+            \d v1 ->
                 case d of
                     ProductV ((( thisIdx, thisPatch ) :: prevPatches) as patches) ->
                         let
@@ -380,13 +366,13 @@ andMap getter (Differ this) (Differ prev) =
 
                             ( maybeCtor, thisValue ) =
                                 if thisIdx == prev.index + 1 then
-                                    ( prev.patch (Diff (ProductV prevPatches)) v1
-                                    , this.patch (Diff thisPatch) thisV1
+                                    ( prev.patch (ProductV prevPatches) v1
+                                    , this.patch thisPatch thisV1
                                         |> Maybe.withDefault thisV1
                                     )
 
                                 else
-                                    ( prev.patch (Diff (ProductV patches)) v1
+                                    ( prev.patch (ProductV patches) v1
                                     , thisV1
                                     )
                         in
@@ -395,7 +381,7 @@ andMap getter (Differ this) (Differ prev) =
                     ProductV [] ->
                         let
                             maybeCtor =
-                                prev.patch (Diff (ProductV [])) v1
+                                prev.patch (ProductV []) v1
 
                             thisValue =
                                 getter v1
