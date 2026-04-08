@@ -1,7 +1,7 @@
 module Differ exposing
     ( Differ, Diff, run, patch
     , unit, bool, int, float, char, string, dict
-    , pure, map, andMap
+    , Combinator, pure, map, andMap
     )
 
 {-|
@@ -19,7 +19,7 @@ module Differ exposing
 
 # Composing differs
 
-@docs pure, map, andMap
+@docs Combinator, pure, map, andMap
 
 -}
 
@@ -27,7 +27,11 @@ import Dict exposing (Dict)
 import Set exposing (Set)
 
 
-type Differ input output
+type alias Differ a =
+    Combinator a a
+
+
+type Combinator input output
     = Differ
         { index : Int
         , default : output
@@ -63,12 +67,12 @@ type alias DictDiff =
 -- Use
 
 
-run : Differ a a -> a -> a -> Diff a
+run : Differ a -> a -> a -> Diff a
 run (Differ differ) v1 v2 =
     Diff (differ.diff v1 v2)
 
 
-patch : Differ a a -> Diff a -> a -> a
+patch : Differ a -> Diff a -> a -> a
 patch (Differ differ) (Diff diff) v1 =
     differ.patch diff v1
         |> Maybe.withDefault v1
@@ -78,7 +82,7 @@ patch (Differ differ) (Diff diff) v1 =
 -- Primitives
 
 
-unit : Differ () ()
+unit : Differ ()
 unit =
     Differ
         { index = 0
@@ -99,7 +103,7 @@ unit =
         }
 
 
-bool : Differ Bool Bool
+bool : Differ Bool
 bool =
     Differ
         { index = 0
@@ -127,7 +131,7 @@ bool =
         }
 
 
-char : Differ Char Char
+char : Differ Char
 char =
     Differ
         { index = 0
@@ -155,7 +159,7 @@ char =
         }
 
 
-float : Differ Float Float
+float : Differ Float
 float =
     Differ
         { index = 0
@@ -183,7 +187,7 @@ float =
         }
 
 
-int : Differ Int Int
+int : Differ Int
 int =
     Differ
         { index = 0
@@ -211,7 +215,7 @@ int =
         }
 
 
-string : Differ String String
+string : Differ String
 string =
     Differ
         { index = 0
@@ -240,9 +244,9 @@ string =
 
 
 dict :
-    Differ comparable comparable
-    -> Differ v v
-    -> Differ (Dict comparable v) (Dict comparable v)
+    Differ comparable
+    -> Differ v
+    -> Differ (Dict comparable v)
 dict (Differ { toString, fromString }) (Differ valueDiffer) =
     Differ
         { index = 0
@@ -333,7 +337,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
 -- Composition
 
 
-pure : output -> Differ input output
+pure : output -> Combinator input output
 pure v =
     Differ
         { index = 0
@@ -349,7 +353,7 @@ pure v =
         }
 
 
-andMap : (input -> field) -> Differ field field -> Differ input (field -> output) -> Differ input output
+andMap : (input -> field) -> Combinator field field -> Combinator input (field -> output) -> Combinator input output
 andMap getter (Differ this) (Differ prev) =
     Differ
         { index = prev.index + 1
@@ -414,6 +418,6 @@ andMap getter (Differ this) (Differ prev) =
         }
 
 
-map : (output -> input) -> (input -> output) -> Differ input input -> Differ output output
+map : (output -> input) -> (input -> output) -> Combinator input input -> Combinator output output
 map getter setter d =
     pure setter |> andMap getter d

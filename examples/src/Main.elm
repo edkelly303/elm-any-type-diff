@@ -51,12 +51,12 @@ u2 =
         ]
 
 
-userDictDiffer : Differ.Differ (Dict.Dict String User) (Dict.Dict String User)
+userDictDiffer : Differ.Differ (Dict.Dict String User)
 userDictDiffer =
     Differ.dict Differ.string userDiffer
 
 
-userDiffer : Differ.Differ User User
+userDiffer : Differ.Differ User
 userDiffer =
     Differ.pure User
         |> Differ.andMap .name Differ.string
