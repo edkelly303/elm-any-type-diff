@@ -36,28 +36,18 @@ type alias User =
 u1 : Dict.Dict String User
 u1 =
     Dict.fromList
-        [ ( "Ed1", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed2", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed3", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed4", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed5", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed6", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed7", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed8", { name = "Ed", isCool = { really = True } } )
+        [ ( "Ed", { name = "Ed", isCool = { really = True } } )
+        , ( "Simon", { name = "Simon", isCool = { really = True } } )
+        , ( "Leonardo", { name = "Leonardo", isCool = { really = True } } )
         ]
 
 
 u2 : Dict.Dict String User
 u2 =
     Dict.fromList
-        [ ( "Ed1", { name = "Ed", isCool = { really = False } } )
-        , ( "Rebecca", { name = "Rebecca", isCool = { really = True } } )
-        , ( "Ed2", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed3", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed4", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed5", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed6", { name = "Ed", isCool = { really = True } } )
-        , ( "Ed7", { name = "Ed", isCool = { really = True } } )
+        [ ( "Ed", { name = "Ed", isCool = { really = False } } )
+        , ( "Mario", { name = "Mario", isCool = { really = True } } )
+        , ( "Simon", { name = "Simon", isCool = { really = True } } )
         ]
 
 
