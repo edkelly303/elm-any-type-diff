@@ -33,6 +33,8 @@ type Differ input output
         , default : output
         , diff : input -> input -> Value
         , patch : Value -> input -> Maybe output
+        , toString : input -> String
+        , fromString : String -> Maybe input
         }
 
 
@@ -91,6 +93,8 @@ unit =
 
                     _ ->
                         Nothing
+        , toString = \() -> "()"
+        , fromString = \_ -> Just ()
         }
 
 
@@ -117,6 +121,8 @@ bool =
 
                     _ ->
                         Nothing
+        , toString = \_ -> ""
+        , fromString = \_ -> Just True
         }
 
 
@@ -143,6 +149,8 @@ char =
 
                     _ ->
                         Nothing
+        , toString = String.fromChar
+        , fromString = String.uncons >> Maybe.map Tuple.first
         }
 
 
@@ -169,6 +177,8 @@ float =
 
                     _ ->
                         Nothing
+        , toString = String.fromFloat
+        , fromString = String.toFloat
         }
 
 
@@ -195,6 +205,8 @@ int =
 
                     _ ->
                         Nothing
+        , toString = String.fromInt
+        , fromString = String.toInt
         }
 
 
@@ -221,16 +233,16 @@ string =
 
                     _ ->
                         Nothing
+        , toString = identity
+        , fromString = Just
         }
 
 
 dict :
-    { keyToString : comparable -> String
-    , keyFromString : String -> Maybe comparable
-    }
+    Differ comparable comparable
     -> Differ v v
     -> Differ (Dict comparable v) (Dict comparable v)
-dict { keyToString, keyFromString } (Differ valueDiffer) =
+dict (Differ { toString, fromString }) (Differ valueDiffer) =
     Differ
         { index = 0
         , default = Dict.empty
@@ -241,7 +253,7 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
 
                 else
                     Dict.merge
-                        (\k _ out -> { out | deletions = Set.insert (keyToString k) out.deletions })
+                        (\k _ out -> { out | deletions = Set.insert (toString k) out.deletions })
                         (\k oldValue newValue out ->
                             let
                                 valueDiff =
@@ -251,14 +263,14 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
                                 out
 
                             else
-                                { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
+                                { out | insertions = Dict.insert (toString k) valueDiff out.insertions }
                         )
                         (\k newValue out ->
                             let
                                 valueDiff =
                                     valueDiffer.diff valueDiffer.default newValue
                             in
-                            { out | insertions = Dict.insert (keyToString k) valueDiff out.insertions }
+                            { out | insertions = Dict.insert (toString k) valueDiff out.insertions }
                         )
                         oldDict
                         newDict
@@ -272,7 +284,7 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
                             newDictAfterDeletions =
                                 Set.foldl
                                     (\k out ->
-                                        case keyFromString k of
+                                        case fromString k of
                                             Just comparableK ->
                                                 Dict.remove comparableK out
 
@@ -285,7 +297,7 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
                             newDictAfterDeletionsAndInsertions =
                                 Dict.foldl
                                     (\k v out ->
-                                        case keyFromString k of
+                                        case fromString k of
                                             Just comparableK ->
                                                 Dict.update comparableK
                                                     (\maybeV1 ->
@@ -311,6 +323,8 @@ dict { keyToString, keyFromString } (Differ valueDiffer) =
 
                     _ ->
                         Nothing
+        , toString = always ""
+        , fromString = always (Just Dict.empty)
         }
 
 
@@ -329,6 +343,8 @@ pure v =
         , patch =
             \_ _ ->
                 Just v
+        , toString = always ""
+        , fromString = always Nothing
         }
 
 
@@ -392,6 +408,8 @@ andMap getter (Differ this) (Differ prev) =
 
                     _ ->
                         Nothing
+        , toString = always ""
+        , fromString = always Nothing
         }
 
 

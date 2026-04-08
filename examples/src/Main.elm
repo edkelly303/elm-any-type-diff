@@ -63,7 +63,7 @@ u2 =
 
 userDictDiffer : Differ.Differ (Dict.Dict String User) (Dict.Dict String User)
 userDictDiffer =
-    Differ.dict { keyToString = identity, keyFromString = Just } userDiffer
+    Differ.dict Differ.string userDiffer
 
 
 userDiffer : Differ.Differ User User
