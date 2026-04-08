@@ -68,6 +68,6 @@ myDiff =
     Differ.run userDictDiffer u1 u2
 
 
-output : Maybe (Dict.Dict String User)
+output : Dict.Dict String User
 output =
     Differ.patch userDictDiffer myDiff u1

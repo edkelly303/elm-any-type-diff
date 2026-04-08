@@ -63,14 +63,15 @@ type alias DictDiff =
 -- Use
 
 
-run : Differ input output -> input -> input -> Diff input
+run : Differ a a -> a -> a -> Diff a
 run (Differ differ) v1 v2 =
     Diff (differ.diff v1 v2)
 
 
-patch : Differ input output -> Diff input -> input -> Maybe output
+patch : Differ a a -> Diff a -> a -> a
 patch (Differ differ) (Diff diff) v1 =
     differ.patch diff v1
+        |> Maybe.withDefault v1
 
 
 
