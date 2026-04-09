@@ -1,6 +1,6 @@
 module Differ exposing
     ( Differ, Diff, run, patch
-    , unit, bool, int, float, char, string, dict
+    , unit, bool, int, float, char, string, dict, set
     , Combinator, pure, map, andMap
     )
 
@@ -14,7 +14,7 @@ module Differ exposing
 
 # Primitive differs
 
-@docs unit, bool, int, float, char, string, dict
+@docs unit, bool, int, float, char, string, dict, set
 
 
 # Composing differs
@@ -24,6 +24,7 @@ module Differ exposing
 -}
 
 import Dict exposing (Dict)
+import List.Extra
 import Set exposing (Set)
 
 
@@ -55,11 +56,18 @@ type Value
     | StringV String
     | ProductV (List ( Int, Value ))
     | DictV DictDiff
+    | SetV SetDiff
 
 
 type alias DictDiff =
     { insertions : Dict String Value
     , deletions : Set String
+    }
+
+
+type alias SetDiff =
+    { insertions : List Value
+    , deletions : List Int
     }
 
 
@@ -330,6 +338,79 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                         Nothing
         , toString = always ""
         , fromString = always (Just Dict.empty)
+        }
+
+
+set :
+    Differ comparable
+    -> Differ (Set comparable)
+set (Differ itemDiffer) =
+    Differ
+        { index = 0
+        , default = Set.empty
+        , diff =
+            \oldSet newSet ->
+                if oldSet == newSet then
+                    ProductV []
+
+                else
+                    SetV
+                        { insertions =
+                            Set.diff oldSet newSet
+                                |> Set.toList
+                                |> List.map (itemDiffer.diff itemDiffer.default)
+                        , deletions =
+                            Set.toList oldSet
+                                |> List.indexedMap
+                                    (\idx item ->
+                                        if Set.member item newSet then
+                                            Nothing
+
+                                        else
+                                            Just idx
+                                    )
+                                |> List.filterMap identity
+                        }
+        , patch =
+            \changes oldSet ->
+                case changes of
+                    SetV { insertions, deletions } ->
+                        let
+                            newSetAfterDeletions =
+                                oldSet
+                                    |> Set.toList
+                                    |> List.Extra.indexedFoldl
+                                        (\idx item out ->
+                                            if List.member idx deletions then
+                                                out
+
+                                            else
+                                                Set.insert item out
+                                        )
+                                        Set.empty
+
+                            newSetAfterDeletionsAndInsertions =
+                                List.foldl
+                                    (\insertion out ->
+                                        case itemDiffer.patch insertion itemDiffer.default of
+                                            Just item ->
+                                                Set.insert item out
+
+                                            Nothing ->
+                                                out
+                                    )
+                                    newSetAfterDeletions
+                                    insertions
+                        in
+                        Just newSetAfterDeletionsAndInsertions
+
+                    ProductV [] ->
+                        Just oldSet
+
+                    _ ->
+                        Nothing
+        , toString = always ""
+        , fromString = always (Just Set.empty)
         }
 
 
