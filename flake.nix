@@ -40,8 +40,8 @@
           alias run="(cd $DEVDIR && \
           code . && \
           cd examples && \
-          npx elm-watch@beta hot)" && \
-          xdg-open 'http://localhost:8008'
+          npx elm-watch@beta hot && \
+          xdg-open 'http://localhost:8008')"
         '';
       };
     };
