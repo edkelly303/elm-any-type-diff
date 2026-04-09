@@ -36,37 +36,37 @@ type Combinator input output
     = Differ
         { index : Int
         , default : output
-        , diff : input -> input -> Value
-        , patch : Value -> input -> Maybe output
+        , diff : input -> input -> Changes
+        , patch : Changes -> input -> Maybe output
         , toString : input -> String
         , fromString : String -> Maybe input
         }
 
 
 type Diff input
-    = Diff Value
+    = Diff Changes
 
 
-type Value
-    = UnitV
-    | BoolV Bool
-    | IntV Int
-    | FloatV Float
-    | CharV Char
-    | StringV String
-    | ProductV (List ( Int, Value ))
-    | DictV DictDiff
-    | SetV SetDiff
+type Changes
+    = NoChanges
+    | BoolChanges Bool
+    | IntChanges Int
+    | FloatChanges Float
+    | CharChanges Char
+    | StringChanges String
+    | ProductChanges (List ( Int, Changes ))
+    | DictChanges DictDiff
+    | SetChanges SetDiff
 
 
 type alias DictDiff =
-    { insertions : Dict String Value
+    { insertions : Dict String Changes
     , deletions : Set String
     }
 
 
 type alias SetDiff =
-    { insertions : List Value
+    { insertions : List Changes
     , deletions : List Int
     }
 
@@ -81,8 +81,8 @@ run (Differ differ) v1 v2 =
 
 
 patch : Differ a -> Diff a -> a -> a
-patch (Differ differ) (Diff diff) v1 =
-    differ.patch diff v1
+patch (Differ differ) (Diff changes) v1 =
+    differ.patch changes v1
         |> Maybe.withDefault v1
 
 
@@ -97,11 +97,11 @@ unit =
         , default = ()
         , diff =
             \_ _ ->
-                UnitV
+                NoChanges
         , patch =
-            \d _ ->
-                case d of
-                    UnitV ->
+            \changes _ ->
+                case changes of
+                    NoChanges ->
                         Just ()
 
                     _ ->
@@ -117,20 +117,20 @@ bool =
         { index = 0
         , default = True
         , diff =
-            \v1 v2 ->
-                if v1 == v2 then
-                    ProductV []
+            \oldBool newBool ->
+                if oldBool == newBool then
+                    NoChanges
 
                 else
-                    BoolV v2
+                    BoolChanges newBool
         , patch =
-            \d v1 ->
-                case d of
-                    BoolV v2 ->
-                        Just v2
+            \changes oldBool ->
+                case changes of
+                    BoolChanges newBool ->
+                        Just newBool
 
-                    ProductV [] ->
-                        Just v1
+                    NoChanges ->
+                        Just oldBool
 
                     _ ->
                         Nothing
@@ -145,20 +145,20 @@ char =
         { index = 0
         , default = ' '
         , diff =
-            \v1 v2 ->
-                if v1 == v2 then
-                    ProductV []
+            \oldChar newChar ->
+                if oldChar == newChar then
+                    NoChanges
 
                 else
-                    CharV v2
+                    CharChanges newChar
         , patch =
-            \d v1 ->
-                case d of
-                    CharV v2 ->
-                        Just v2
+            \changes oldChar ->
+                case changes of
+                    CharChanges newChar ->
+                        Just newChar
 
-                    ProductV [] ->
-                        Just v1
+                    NoChanges ->
+                        Just oldChar
 
                     _ ->
                         Nothing
@@ -173,20 +173,20 @@ float =
         { index = 0
         , default = 0
         , diff =
-            \v1 v2 ->
-                if v1 == v2 then
-                    ProductV []
+            \oldFloat newFloat ->
+                if oldFloat == newFloat then
+                    NoChanges
 
                 else
-                    FloatV v2
+                    FloatChanges newFloat
         , patch =
-            \d v1 ->
-                case d of
-                    FloatV v2 ->
-                        Just v2
+            \changes oldFloat ->
+                case changes of
+                    FloatChanges newFloat ->
+                        Just newFloat
 
-                    ProductV [] ->
-                        Just v1
+                    NoChanges ->
+                        Just oldFloat
 
                     _ ->
                         Nothing
@@ -201,20 +201,20 @@ int =
         { index = 0
         , default = 0
         , diff =
-            \v1 v2 ->
-                if v1 == v2 then
-                    ProductV []
+            \oldInt newInt ->
+                if oldInt == newInt then
+                    NoChanges
 
                 else
-                    IntV v2
+                    IntChanges newInt
         , patch =
-            \d v1 ->
-                case d of
-                    IntV v2 ->
-                        Just v2
+            \changes oldInt ->
+                case changes of
+                    IntChanges newInt ->
+                        Just newInt
 
-                    ProductV [] ->
-                        Just v1
+                    NoChanges ->
+                        Just oldInt
 
                     _ ->
                         Nothing
@@ -229,20 +229,20 @@ string =
         { index = 0
         , default = ""
         , diff =
-            \s1 s2 ->
-                if s1 == s2 then
-                    ProductV []
+            \oldString newString ->
+                if oldString == newString then
+                    NoChanges
 
                 else
-                    StringV s2
+                    StringChanges newString
         , patch =
-            \d s1 ->
-                case d of
-                    StringV s2 ->
-                        Just s2
+            \changes oldString ->
+                case changes of
+                    StringChanges newString ->
+                        Just newString
 
-                    ProductV [] ->
-                        Just s1
+                    NoChanges ->
+                        Just oldString
 
                     _ ->
                         Nothing
@@ -262,7 +262,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
         , diff =
             \oldDict newDict ->
                 if oldDict == newDict then
-                    ProductV []
+                    NoChanges
 
                 else
                     Dict.merge
@@ -272,7 +272,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                                 valueDiff =
                                     valueDiffer.diff oldValue newValue
                             in
-                            if valueDiff == ProductV [] then
+                            if valueDiff == NoChanges then
                                 out
 
                             else
@@ -288,11 +288,11 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                         oldDict
                         newDict
                         { insertions = Dict.empty, deletions = Set.empty }
-                        |> DictV
+                        |> DictChanges
         , patch =
-            \d oldDict ->
-                case d of
-                    DictV { insertions, deletions } ->
+            \changes oldDict ->
+                case changes of
+                    DictChanges { insertions, deletions } ->
                         let
                             newDictAfterDeletions =
                                 Set.foldl
@@ -331,7 +331,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                         in
                         Just newDictAfterDeletionsAndInsertions
 
-                    ProductV [] ->
+                    NoChanges ->
                         Just oldDict
 
                     _ ->
@@ -351,10 +351,10 @@ set (Differ itemDiffer) =
         , diff =
             \oldSet newSet ->
                 if oldSet == newSet then
-                    ProductV []
+                    NoChanges
 
                 else
-                    SetV
+                    SetChanges
                         { insertions =
                             Set.diff oldSet newSet
                                 |> Set.toList
@@ -374,7 +374,7 @@ set (Differ itemDiffer) =
         , patch =
             \changes oldSet ->
                 case changes of
-                    SetV { insertions, deletions } ->
+                    SetChanges { insertions, deletions } ->
                         let
                             newSetAfterDeletions =
                                 oldSet
@@ -404,7 +404,7 @@ set (Differ itemDiffer) =
                         in
                         Just newSetAfterDeletionsAndInsertions
 
-                    ProductV [] ->
+                    NoChanges ->
                         Just oldSet
 
                     _ ->
@@ -425,7 +425,7 @@ pure v =
         , default = v
         , diff =
             \_ _ ->
-                ProductV []
+                NoChanges
         , patch =
             \_ _ ->
                 Just v
@@ -448,42 +448,42 @@ andMap getter (Differ this) (Differ prev) =
                     prevValue =
                         prev.diff v1 v2
                 in
-                if thisValue == ProductV [] then
+                if thisValue == NoChanges then
                     prevValue
 
                 else
                     case prevValue of
-                        ProductV prevValues ->
-                            ProductV (( prev.index + 1, thisValue ) :: prevValues)
+                        ProductChanges prevValues ->
+                            ProductChanges (( prev.index + 1, thisValue ) :: prevValues)
 
                         _ ->
-                            ProductV [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
+                            ProductChanges [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
         , patch =
-            \d v1 ->
-                case d of
-                    ProductV ((( thisIdx, thisPatch ) :: prevPatches) as patches) ->
+            \changes v1 ->
+                case changes of
+                    ProductChanges ((( thisIdx, thisPatch ) :: prevPatches) as patches) ->
                         let
                             thisV1 =
                                 getter v1
 
                             ( maybeCtor, thisValue ) =
                                 if thisIdx == prev.index + 1 then
-                                    ( prev.patch (ProductV prevPatches) v1
+                                    ( prev.patch (ProductChanges prevPatches) v1
                                     , this.patch thisPatch thisV1
                                         |> Maybe.withDefault thisV1
                                     )
 
                                 else
-                                    ( prev.patch (ProductV patches) v1
+                                    ( prev.patch (ProductChanges patches) v1
                                     , thisV1
                                     )
                         in
                         Maybe.map (\ctor -> ctor thisValue) maybeCtor
 
-                    ProductV [] ->
+                    NoChanges ->
                         let
                             maybeCtor =
-                                prev.patch (ProductV []) v1
+                                prev.patch NoChanges v1
 
                             thisValue =
                                 getter v1
