@@ -315,17 +315,17 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
 
                             newDictAfterDeletionsAndInsertions =
                                 Dict.foldl
-                                    (\k v out ->
+                                    (\k insertionChanges out ->
                                         case fromString k of
                                             Just comparableK ->
                                                 Dict.update comparableK
-                                                    (\maybeV1 ->
-                                                        case maybeV1 of
-                                                            Just v1_ ->
-                                                                valueDiffer.patch v v1_
+                                                    (\maybeOldValue ->
+                                                        case maybeOldValue of
+                                                            Just oldValue ->
+                                                                valueDiffer.patch insertionChanges oldValue
 
                                                             Nothing ->
-                                                                valueDiffer.patch v valueDiffer.default
+                                                                valueDiffer.patch insertionChanges valueDiffer.default
                                                     )
                                                     out
 
@@ -362,11 +362,12 @@ set (Differ itemDiffer) =
                 else
                     SetChanges
                         { insertions =
-                            Set.diff oldSet newSet
+                            Set.diff newSet oldSet
                                 |> Set.toList
                                 |> List.map (itemDiffer.diff itemDiffer.default)
                         , deletions =
-                            Set.toList oldSet
+                            oldSet
+                                |> Set.toList
                                 |> List.indexedMap
                                     (\idx item ->
                                         if Set.member item newSet then
@@ -388,22 +389,22 @@ set (Differ itemDiffer) =
                                     |> List.Extra.indexedFoldl
                                         (\idx item out ->
                                             if List.member idx deletions then
-                                                out
+                                                Set.remove item out
 
                                             else
-                                                Set.insert item out
+                                                out
                                         )
-                                        Set.empty
+                                        oldSet
 
                             newSetAfterDeletionsAndInsertions =
                                 List.foldl
-                                    (\insertion out ->
-                                        case itemDiffer.patch insertion itemDiffer.default of
+                                    (\insertionChanges out ->
+                                        case itemDiffer.patch insertionChanges itemDiffer.default of
                                             Just item ->
                                                 Set.insert item out
 
                                             Nothing ->
-                                                out
+                                                out 
                                     )
                                     newSetAfterDeletions
                                     insertions
@@ -531,6 +532,9 @@ andMap getter (Differ this) (Differ prev) =
                     case prevValue of
                         ProductChanges prevValues ->
                             ProductChanges (( prev.index + 1, thisValue ) :: prevValues)
+
+                        NoChanges ->
+                            ProductChanges [ ( prev.index + 1, thisValue ) ]
 
                         _ ->
                             ProductChanges [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
