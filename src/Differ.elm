@@ -1,6 +1,6 @@
 module Differ exposing
     ( Differ, Diff, run, patch
-    , unit, bool, int, float, char, string, dict, set
+    , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
     )
 
@@ -14,7 +14,7 @@ module Differ exposing
 
 # Primitive differs
 
-@docs unit, bool, int, float, char, string, dict, set
+@docs unit, bool, int, float, char, string, dict, set, list
 
 
 # Composing differs
@@ -24,6 +24,7 @@ module Differ exposing
 -}
 
 import Dict exposing (Dict)
+import Diff as ListDiffer
 import List.Extra
 import Set exposing (Set)
 
@@ -57,6 +58,7 @@ type Changes
     | ProductChanges (List ( Int, Changes ))
     | DictChanges DictDiff
     | SetChanges SetDiff
+    | ListChanges ListDiff
 
 
 type alias DictDiff =
@@ -69,6 +71,10 @@ type alias SetDiff =
     { insertions : List Changes
     , deletions : List Int
     }
+
+
+type alias ListDiff =
+    List (ListDiffer.Change Never Changes)
 
 
 
@@ -411,6 +417,72 @@ set (Differ itemDiffer) =
                         Nothing
         , toString = always ""
         , fromString = always (Just Set.empty)
+        }
+
+
+list :
+    Differ a
+    -> Differ (List a)
+list (Differ itemDiffer) =
+    Differ
+        { index = 0
+        , default = []
+        , diff =
+            \oldList newList ->
+                if oldList == newList then
+                    NoChanges
+
+                else
+                    ListChanges
+                        (ListDiffer.diff oldList newList
+                            |> List.map
+                                (\change ->
+                                    case change of
+                                        ListDiffer.Added a ->
+                                            ListDiffer.Added (itemDiffer.diff itemDiffer.default a)
+
+                                        ListDiffer.Removed a ->
+                                            ListDiffer.Removed (itemDiffer.diff itemDiffer.default a)
+
+                                        ListDiffer.Similar _ _ ever ->
+                                            never ever
+
+                                        ListDiffer.NoChange a ->
+                                            ListDiffer.NoChange (itemDiffer.diff itemDiffer.default a)
+                                )
+                        )
+        , patch =
+            \changes oldList ->
+                case changes of
+                    ListChanges cs ->
+                        Just
+                            (List.map2
+                                (\oldItem change ->
+                                    case change of
+                                        ListDiffer.Added itemChanges ->
+                                            itemDiffer.patch itemChanges itemDiffer.default
+
+                                        ListDiffer.Removed _ ->
+                                            Nothing
+
+                                        ListDiffer.Similar _ _ ever ->
+                                            never ever
+
+                                        ListDiffer.NoChange _ ->
+                                            Just oldItem
+                                )
+                                oldList
+                                cs
+                                |> List.filterMap identity
+                            )
+
+                    NoChanges ->
+                        Just oldList
+
+                    _ ->
+                        Nothing
+        , toString = always ""
+        , fromString = always (Just [])
         }
 
 
