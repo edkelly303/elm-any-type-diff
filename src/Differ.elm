@@ -253,8 +253,8 @@ string =
 
 dict :
     Differ comparable
-    -> Differ v
-    -> Differ (Dict comparable v)
+    -> Differ value
+    -> Differ (Dict comparable value)
 dict (Differ { toString, fromString }) (Differ valueDiffer) =
     Differ
         { index = 0
@@ -434,7 +434,11 @@ pure v =
         }
 
 
-andMap : (input -> field) -> Combinator field field -> Combinator input (field -> output) -> Combinator input output
+andMap :
+    (input -> field)
+    -> Combinator field field
+    -> Combinator input (field -> output)
+    -> Combinator input output
 andMap getter (Differ this) (Differ prev) =
     Differ
         { index = prev.index + 1
@@ -499,6 +503,10 @@ andMap getter (Differ this) (Differ prev) =
         }
 
 
-map : (output -> input) -> (input -> output) -> Combinator input input -> Combinator output output
+map :
+    (output -> input)
+    -> (input -> output)
+    -> Combinator input input
+    -> Combinator output output
 map getter setter d =
     pure setter |> andMap getter d
