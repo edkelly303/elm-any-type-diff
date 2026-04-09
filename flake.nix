@@ -20,8 +20,7 @@
         name = "devShell";
         packages = with pkgs; [
           xdg-utils
-          nodePackages.nodejs
-          nodePackages.npm
+          nodejs
           elmPackages.elm
           elmPackages.elm-json
           elmPackages.elm-format
@@ -32,7 +31,7 @@
         shellHook = ''
           DEVDIR="$PWD"
           echo -e "\n\033[1m*** Entering development shell for elm-any-type-diff ***\033[0m\n"
-          
+
           echo -e -n "Updating repos... "
           (cd $DEVDIR && git pull --quiet &)
           echo -e "Update complete!\n"
@@ -40,7 +39,7 @@
           echo -e "\033[1;36mrun\033[0m         start the development environment"
           alias run="(cd $DEVDIR && \
           code . && \
-          xdg-open 'http://localhost:8000' && \
+          xdg-open 'http://localhost:8008' && \
           cd examples && \
           npx elm-watch@beta hot)"
         '';
