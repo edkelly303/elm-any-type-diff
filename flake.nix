@@ -39,9 +39,9 @@
           echo -e "\033[1;36mrun\033[0m         start the development environment"
           alias run="(cd $DEVDIR && \
           code . && \
-          xdg-open 'http://localhost:8008' && \
           cd examples && \
-          npx elm-watch@beta hot)"
+          npx elm-watch@beta hot)" && \
+          xdg-open 'http://localhost:8008'
         '';
       };
     };
