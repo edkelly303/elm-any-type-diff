@@ -1,0 +1,49 @@
+{
+  description = "elm-any-type-diff development environment";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+  };
+
+  outputs =
+    inputs:
+    let
+      system = "x86_64-linux";
+      pkgs = import inputs.nixpkgs {
+        system = system;
+        config.allowUnfree = true;
+      };
+    in
+    {
+      # SHELL
+      devShells.${system}.default = pkgs.mkShell {
+        name = "devShell";
+        packages = with pkgs; [
+          xdg-utils
+          nodePackages.nodejs
+          nodePackages.npm
+          elmPackages.elm
+          elmPackages.elm-json
+          elmPackages.elm-format
+          elmPackages.elm-test
+          elmPackages.elm-doc-preview
+          elmPackages.elm-review
+        ];
+        shellHook = ''
+          DEVDIR="$PWD"
+          echo -e "\n\033[1m*** Entering development shell for elm-any-type-diff ***\033[0m\n"
+          
+          echo -e -n "Updating repos... "
+          (cd $DEVDIR && git pull --quiet &)
+          echo -e "Update complete!\n"
+
+          echo -e "\033[1;36mrun\033[0m         start the development environment"
+          alias run="(cd $DEVDIR && \
+          code . && \
+          xdg-open 'http://localhost:8000' && \
+          cd examples && \
+          npx elm-watch@beta hot)"
+        '';
+      };
+    };
+}
