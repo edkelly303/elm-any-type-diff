@@ -2,6 +2,7 @@ module Differ exposing
     ( Differ, Diff, run, patch
     , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
+    , yoloPatch
     )
 
 {-|
@@ -86,10 +87,15 @@ run (Differ differ) v1 v2 =
     Diff (differ.diff v1 v2)
 
 
-patch : Differ a -> Diff a -> a -> a
+patch : Differ a -> Diff a -> a -> Maybe a
 patch (Differ differ) (Diff changes) v1 =
     differ.patch changes v1
-        |> Maybe.withDefault v1
+
+
+yoloPatch : Differ c -> Diff c -> c -> c
+yoloPatch differ diff old =
+    patch differ diff old
+        |> Maybe.withDefault old
 
 
 
@@ -404,7 +410,7 @@ set (Differ itemDiffer) =
                                                 Set.insert item out
 
                                             Nothing ->
-                                                out 
+                                                out
                                     )
                                     newSetAfterDeletions
                                     insertions
@@ -539,34 +545,48 @@ andMap getter (Differ this) (Differ prev) =
                         _ ->
                             ProductChanges [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
         , patch =
-            \changes v1 ->
+            \changes old ->
                 case changes of
                     ProductChanges ((( thisIdx, thisPatch ) :: prevPatches) as patches) ->
                         let
-                            thisV1 =
-                                getter v1
+                            thisOld =
+                                getter old
 
-                            ( maybeCtor, thisValue ) =
+                            ( maybeCtor, maybeThisValue ) =
                                 if thisIdx == prev.index + 1 then
-                                    ( prev.patch (ProductChanges prevPatches) v1
-                                    , this.patch thisPatch thisV1
-                                        |> Maybe.withDefault thisV1
+                                    ( prev.patch (ProductChanges prevPatches) old
+                                    , this.patch thisPatch thisOld
                                     )
 
                                 else
-                                    ( prev.patch (ProductChanges patches) v1
-                                    , thisV1
+                                    ( prev.patch (ProductChanges patches) old
+                                    , Just thisOld
                                     )
                         in
-                        Maybe.map (\ctor -> ctor thisValue) maybeCtor
+                        Maybe.map2
+                            (\ctor thisValue -> ctor thisValue)
+                            maybeCtor
+                            maybeThisValue
+
+                    ProductChanges [] ->
+                        let
+                            maybeCtor =
+                                prev.patch NoChanges old
+
+                            thisValue =
+                                getter old
+                        in
+                        Maybe.map
+                            (\ctor -> ctor thisValue)
+                            maybeCtor
 
                     NoChanges ->
                         let
                             maybeCtor =
-                                prev.patch NoChanges v1
+                                prev.patch NoChanges old
 
                             thisValue =
-                                getter v1
+                                getter old
                         in
                         Maybe.map
                             (\ctor -> ctor thisValue)
