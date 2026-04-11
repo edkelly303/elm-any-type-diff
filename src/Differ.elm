@@ -50,16 +50,15 @@ type Diff input
 
 
 type Changes
-    = NoChanges
-    | BoolChanges Bool
-    | IntChanges Int
-    | FloatChanges Float
-    | CharChanges Char
-    | StringChanges String
-    | ProductChanges (List ( Int, Changes ))
-    | DictChanges DictDiff
-    | SetChanges SetDiff
-    | ListChanges ListDiff
+    = Changes (List ( Int, Changes ))
+    | BoolChange Bool
+    | IntChange Int
+    | FloatChange Float
+    | CharChange Char
+    | StringChange String
+    | DictChange DictDiff
+    | SetChange SetDiff
+    | ListChange ListDiff
 
 
 type alias DictDiff =
@@ -109,11 +108,11 @@ unit =
         , default = ()
         , diff =
             \_ _ ->
-                NoChanges
+                Changes []
         , patch =
             \changes _ ->
                 case changes of
-                    NoChanges ->
+                    Changes [] ->
                         Just ()
 
                     _ ->
@@ -131,17 +130,17 @@ bool =
         , diff =
             \oldBool newBool ->
                 if oldBool == newBool then
-                    NoChanges
+                    Changes []
 
                 else
-                    BoolChanges newBool
+                    BoolChange newBool
         , patch =
             \changes oldBool ->
                 case changes of
-                    BoolChanges newBool ->
+                    BoolChange newBool ->
                         Just newBool
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldBool
 
                     _ ->
@@ -159,17 +158,17 @@ char =
         , diff =
             \oldChar newChar ->
                 if oldChar == newChar then
-                    NoChanges
+                    Changes []
 
                 else
-                    CharChanges newChar
+                    CharChange newChar
         , patch =
             \changes oldChar ->
                 case changes of
-                    CharChanges newChar ->
+                    CharChange newChar ->
                         Just newChar
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldChar
 
                     _ ->
@@ -187,17 +186,17 @@ float =
         , diff =
             \oldFloat newFloat ->
                 if oldFloat == newFloat then
-                    NoChanges
+                    Changes []
 
                 else
-                    FloatChanges newFloat
+                    FloatChange newFloat
         , patch =
             \changes oldFloat ->
                 case changes of
-                    FloatChanges newFloat ->
+                    FloatChange newFloat ->
                         Just newFloat
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldFloat
 
                     _ ->
@@ -215,17 +214,17 @@ int =
         , diff =
             \oldInt newInt ->
                 if oldInt == newInt then
-                    NoChanges
+                    Changes []
 
                 else
-                    IntChanges newInt
+                    IntChange newInt
         , patch =
             \changes oldInt ->
                 case changes of
-                    IntChanges newInt ->
+                    IntChange newInt ->
                         Just newInt
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldInt
 
                     _ ->
@@ -243,17 +242,17 @@ string =
         , diff =
             \oldString newString ->
                 if oldString == newString then
-                    NoChanges
+                    Changes []
 
                 else
-                    StringChanges newString
+                    StringChange newString
         , patch =
             \changes oldString ->
                 case changes of
-                    StringChanges newString ->
+                    StringChange newString ->
                         Just newString
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldString
 
                     _ ->
@@ -274,7 +273,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
         , diff =
             \oldDict newDict ->
                 if oldDict == newDict then
-                    NoChanges
+                    Changes []
 
                 else
                     Dict.merge
@@ -284,7 +283,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                                 valueDiff =
                                     valueDiffer.diff oldValue newValue
                             in
-                            if valueDiff == NoChanges then
+                            if valueDiff == Changes [] then
                                 out
 
                             else
@@ -300,11 +299,11 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                         oldDict
                         newDict
                         { insertions = Dict.empty, deletions = Set.empty }
-                        |> DictChanges
+                        |> DictChange
         , patch =
             \changes oldDict ->
                 case changes of
-                    DictChanges { insertions, deletions } ->
+                    DictChange { insertions, deletions } ->
                         let
                             newDictAfterDeletions =
                                 Set.foldl
@@ -343,7 +342,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                         in
                         Just newDictAfterDeletionsAndInsertions
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldDict
 
                     _ ->
@@ -363,10 +362,10 @@ set (Differ itemDiffer) =
         , diff =
             \oldSet newSet ->
                 if oldSet == newSet then
-                    NoChanges
+                    Changes []
 
                 else
-                    SetChanges
+                    SetChange
                         { insertions =
                             Set.diff newSet oldSet
                                 |> Set.toList
@@ -387,7 +386,7 @@ set (Differ itemDiffer) =
         , patch =
             \changes oldSet ->
                 case changes of
-                    SetChanges { insertions, deletions } ->
+                    SetChange { insertions, deletions } ->
                         let
                             newSetAfterDeletions =
                                 oldSet
@@ -417,7 +416,7 @@ set (Differ itemDiffer) =
                         in
                         Just newSetAfterDeletionsAndInsertions
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldSet
 
                     _ ->
@@ -437,10 +436,10 @@ list (Differ itemDiffer) =
         , diff =
             \oldList newList ->
                 if oldList == newList then
-                    NoChanges
+                    Changes []
 
                 else
-                    ListChanges
+                    ListChange
                         (ListDiffer.diff oldList newList
                             |> List.map
                                 (\change ->
@@ -461,7 +460,7 @@ list (Differ itemDiffer) =
         , patch =
             \changes oldList ->
                 case changes of
-                    ListChanges cs ->
+                    ListChange cs ->
                         Just
                             (List.map2
                                 (\oldItem change ->
@@ -483,7 +482,7 @@ list (Differ itemDiffer) =
                                 |> List.filterMap identity
                             )
 
-                    NoChanges ->
+                    Changes [] ->
                         Just oldList
 
                     _ ->
@@ -504,7 +503,7 @@ pure v =
         , default = v
         , diff =
             \_ _ ->
-                NoChanges
+                Changes []
         , patch =
             \_ _ ->
                 Just v
@@ -531,35 +530,32 @@ andMap getter (Differ this) (Differ prev) =
                     prevValue =
                         prev.diff v1 v2
                 in
-                if thisValue == NoChanges then
+                if thisValue == Changes [] then
                     prevValue
 
                 else
                     case prevValue of
-                        ProductChanges prevValues ->
-                            ProductChanges (( prev.index + 1, thisValue ) :: prevValues)
-
-                        NoChanges ->
-                            ProductChanges [ ( prev.index + 1, thisValue ) ]
+                        Changes prevValues ->
+                            Changes (( prev.index + 1, thisValue ) :: prevValues)
 
                         _ ->
-                            ProductChanges [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
+                            Changes [ ( prev.index + 1, thisValue ), ( prev.index, prevValue ) ]
         , patch =
             \changes old ->
                 case changes of
-                    ProductChanges ((( thisIdx, thisPatch ) :: prevPatches) as patches) ->
+                    Changes ((( thisIdx, thisPatch ) :: prevPatches) as patches) ->
                         let
                             thisOld =
                                 getter old
 
                             ( maybeCtor, maybeThisValue ) =
                                 if thisIdx == prev.index + 1 then
-                                    ( prev.patch (ProductChanges prevPatches) old
+                                    ( prev.patch (Changes prevPatches) old
                                     , this.patch thisPatch thisOld
                                     )
 
                                 else
-                                    ( prev.patch (ProductChanges patches) old
+                                    ( prev.patch (Changes patches) old
                                     , Just thisOld
                                     )
                         in
@@ -568,22 +564,10 @@ andMap getter (Differ this) (Differ prev) =
                             maybeCtor
                             maybeThisValue
 
-                    ProductChanges [] ->
+                    Changes [] ->
                         let
                             maybeCtor =
-                                prev.patch NoChanges old
-
-                            thisValue =
-                                getter old
-                        in
-                        Maybe.map
-                            (\ctor -> ctor thisValue)
-                            maybeCtor
-
-                    NoChanges ->
-                        let
-                            maybeCtor =
-                                prev.patch NoChanges old
+                                prev.patch (Changes []) old
 
                             thisValue =
                                 getter old
