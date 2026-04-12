@@ -44,6 +44,18 @@ setTest =
     fuzzTest fuzzer differ "set"
 
 
+listTest : Test
+listTest =
+    let
+        differ =
+            Differ.list Differ.string
+
+        fuzzer =
+            F.list F.string
+    in
+    fuzzTest fuzzer differ "list"
+
+
 productTest : Test
 productTest =
     let

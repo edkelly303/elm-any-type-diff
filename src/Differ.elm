@@ -74,7 +74,12 @@ type alias SetDiff =
 
 
 type alias ListDiff =
-    List (ListDiffer.Change Never Changes)
+    List ListDiff2
+
+
+type ListDiff2
+    = Added Changes
+    | Existing Int Int
 
 
 
@@ -441,45 +446,64 @@ list (Differ itemDiffer) =
                 else
                     ListChange
                         (ListDiffer.diff oldList newList
-                            |> List.map
-                                (\change ->
+                            |> List.foldl
+                                (\change { oldIdx, out } ->
                                     case change of
                                         ListDiffer.Added a ->
-                                            ListDiffer.Added (itemDiffer.diff itemDiffer.default a)
+                                            { oldIdx = oldIdx
+                                            , out = Just (Added (itemDiffer.diff itemDiffer.default a)) :: out
+                                            }
 
-                                        ListDiffer.Removed a ->
-                                            ListDiffer.Removed (itemDiffer.diff itemDiffer.default a)
+                                        ListDiffer.Removed _ ->
+                                            { oldIdx = oldIdx + 1
+                                            , out = Nothing :: out
+                                            }
 
                                         ListDiffer.Similar _ _ ever ->
                                             never ever
 
-                                        ListDiffer.NoChange a ->
-                                            ListDiffer.NoChange (itemDiffer.diff itemDiffer.default a)
+                                        ListDiffer.NoChange _ ->
+                                            { oldIdx = oldIdx + 1
+                                            , out =
+                                                case out of
+                                                    (Just (Existing prevStart _)) :: rest ->
+                                                        Just (Existing prevStart oldIdx) :: rest
+
+                                                    _ ->
+                                                        Just (Existing oldIdx oldIdx) :: out
+                                            }
                                 )
+                                { oldIdx = 0, out = [] }
+                            |> .out
+                            |> List.filterMap identity
                         )
         , patch =
             \changes oldList ->
                 case changes of
                     ListChange cs ->
                         Just
-                            (List.map2
-                                (\oldItem change ->
+                            (List.foldl
+                                (\change out ->
                                     case change of
-                                        ListDiffer.Added itemChanges ->
-                                            itemDiffer.patch itemChanges itemDiffer.default
+                                        Added itemDiff ->
+                                            (itemDiffer.default
+                                                |> itemDiffer.patch itemDiff
+                                                |> Maybe.map List.singleton
+                                            )
+                                                :: out
 
-                                        ListDiffer.Removed _ ->
-                                            Nothing
-
-                                        ListDiffer.Similar _ _ ever ->
-                                            never ever
-
-                                        ListDiffer.NoChange _ ->
-                                            Just oldItem
+                                        Existing start end ->
+                                            (oldList
+                                                |> List.drop start
+                                                |> List.take (1 + end - start)
+                                                |> Just
+                                            )
+                                                :: out
                                 )
-                                oldList
+                                []
                                 cs
                                 |> List.filterMap identity
+                                |> List.concat
                             )
 
                     Changes [] ->
