@@ -1,8 +1,7 @@
 module Differ exposing
-    ( Differ, Changes, run, patch
+    ( Differ, Changes, Error, run, patch, safePatch
     , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
-    , safePatch
     )
 
 {-|
@@ -10,7 +9,7 @@ module Differ exposing
 
 # Diffing and patching
 
-@docs Differ, Changes, run, patch, yoloPatch
+@docs Differ, Changes, Error, run, patch, safePatch
 
 
 # Primitive differs
