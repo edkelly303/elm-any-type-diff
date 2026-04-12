@@ -35,22 +35,26 @@ type alias User =
     }
 
 
-u1 : Dict.Dict String User
 u1 =
-    mkUsers
-        [ ed
-        , simon
-        , leonardo
-        ]
+    [ ed
+    , simon
+    , simon
+    , simon
+    , leonardo
+    , leonardo
+    , leonardo
+    ]
 
 
-u2 : Dict.Dict String User
 u2 =
-    mkUsers
-        [ { ed | favouriteWords = Set.insert "oooh" ed.favouriteWords }
-        , simon
-        , mario
-        ]
+    [ { ed | favouriteWords = Set.insert "oooh" ed.favouriteWords }
+    , simon
+    , simon
+    , simon
+    , mario
+    , leonardo
+    , leonardo
+    ]
 
 
 ed : User
@@ -85,16 +89,8 @@ mario =
     }
 
 
-mkUsers : List User -> Dict.Dict String User
-mkUsers list =
-    list
-        |> List.map (\u -> ( u.name, u ))
-        |> Dict.fromList
-
-
-userDictDiffer : Differ.Differ (Dict.Dict String User)
-userDictDiffer =
-    Differ.dict Differ.string userDiffer
+userListDiffer =
+    Differ.list userDiffer
 
 
 userDiffer : Differ.Differ User
@@ -105,11 +101,11 @@ userDiffer =
         |> Differ.andMap .favouriteWords (Differ.set Differ.string)
 
 
-myDiff : Differ.Diff (Dict.Dict String User)
+myDiff : Differ.Diff (List User)
 myDiff =
-    Differ.run userDictDiffer u1 u2
+    Differ.run userListDiffer u1 u2
 
 
-output : Dict.Dict String User
+output : List User
 output =
-    Differ.patch userDictDiffer myDiff u1
+    Differ.yoloPatch userListDiffer myDiff u1
