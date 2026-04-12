@@ -439,7 +439,7 @@ list (Differ itemDiffer) =
 
                 else
                     ListChange
-                        (ListDiffer.diff oldList newList
+                        (ListDiffer.diffWith (areSimilar (Differ itemDiffer)) oldList newList
                             |> List.foldl
                                 (\change { oldIdx, out } ->
                                     case change of
@@ -453,8 +453,10 @@ list (Differ itemDiffer) =
                                             , out = Nothing :: out
                                             }
 
-                                        ListDiffer.Similar _ _ ever ->
-                                            never ever
+                                        ListDiffer.Similar _ _ changes ->
+                                            { oldIdx = oldIdx -- this needs work, need to change Added to include an index
+                                            , out = Just (Added changes) :: out
+                                            }
 
                                         ListDiffer.NoChange _ ->
                                             { oldIdx = oldIdx + 1
@@ -509,6 +511,55 @@ list (Differ itemDiffer) =
         , toString = always ""
         , fromString = always (Just [])
         }
+
+
+areSimilar : Differ a -> a -> a -> Maybe Changes_
+areSimilar (Differ itemDiffer) old new =
+    if size (itemDiffer.diff old new) < size (itemDiffer.diff itemDiffer.default new) then
+        Just (itemDiffer.diff old new)
+
+    else
+        Nothing
+
+
+size : Changes_ -> Int
+size changes =
+    let
+        help total changes_ =
+            case changes_ of
+                Changes cs ->
+                    List.foldl (\( _, c ) tot -> help tot c) total cs
+
+                DictChange cs ->
+                    Set.size cs.deletions
+                        + (cs.insertions
+                            |> Dict.values
+                            |> List.foldl (\c tot -> help tot c) total
+                          )
+
+                SetChange cs ->
+                    List.length cs.deletions
+                        + (cs.insertions
+                            |> List.foldl (\c tot -> help tot c) total
+                          )
+
+                ListChange cs ->
+                    List.foldl
+                        (\c tot ->
+                            case c of
+                                Added cs_ ->
+                                    help tot cs_
+
+                                Existing _ _ ->
+                                    tot + 1
+                        )
+                        total
+                        cs
+
+                _ ->
+                    1
+    in
+    help 0 changes
 
 
 
