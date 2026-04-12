@@ -62,7 +62,7 @@ type Changes_
     | StringChange String
     | DictChange DictChanges
     | SetChange SetChanges
-    | ListChange ListChanges
+    | ListChange (List ListChange)
 
 
 type alias DictChanges =
@@ -77,11 +77,7 @@ type alias SetChanges =
     }
 
 
-type alias ListChanges =
-    List ListChangeType
-
-
-type ListChangeType
+type ListChange
     = Added Changes_
     | Existing Int Int
 
