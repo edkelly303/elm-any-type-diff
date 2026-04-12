@@ -82,5 +82,5 @@ fuzzTest fuzzer differ name =
                 diff =
                     Differ.run differ old new
             in
-            Differ.patch differ diff old
-                |> Expect.equal (Just new)
+            Differ.safePatch differ diff old
+                |> Expect.equal (Ok new)

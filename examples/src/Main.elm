@@ -101,11 +101,11 @@ userDiffer =
         |> Differ.andMap .favouriteWords (Differ.set Differ.string)
 
 
-myDiff : Differ.Diff (List User)
+myDiff : Differ.Changes (List User)
 myDiff =
     Differ.run userListDiffer u1 u2
 
 
 output : List User
 output =
-    Differ.yoloPatch userListDiffer myDiff u1
+    Differ.patch userListDiffer myDiff u1

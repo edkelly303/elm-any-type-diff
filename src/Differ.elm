@@ -1,8 +1,8 @@
 module Differ exposing
-    ( Differ, Diff, run, patch
+    ( Differ, Changes, run, patch
     , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
-    , yoloPatch
+    , safePatch
     )
 
 {-|
@@ -10,7 +10,7 @@ module Differ exposing
 
 # Diffing and patching
 
-@docs Differ, Diff, run, patch
+@docs Differ, Changes, run, patch, yoloPatch
 
 
 # Primitive differs
@@ -38,47 +38,51 @@ type Combinator input output
     = Differ
         { index : Int
         , default : output
-        , diff : input -> input -> Changes
-        , patch : Changes -> input -> Maybe output
+        , diff : input -> input -> Changes_
+        , patch : Changes_ -> input -> Result Error output
         , toString : input -> String
         , fromString : String -> Maybe input
         }
 
 
-type Diff input
-    = Diff Changes
+type Error
+    = Error
 
 
-type Changes
-    = Changes (List ( Int, Changes ))
+type Changes input
+    = Diff Changes_
+
+
+type Changes_
+    = Changes (List ( Int, Changes_ ))
     | BoolChange Bool
     | IntChange Int
     | FloatChange Float
     | CharChange Char
     | StringChange String
-    | DictChange DictDiff
-    | SetChange SetDiff
-    | ListChange ListDiff
+    | DictChange DictChanges
+    | SetChange SetChanges
+    | ListChange ListChanges
 
 
-type alias DictDiff =
-    { insertions : Dict String Changes
+type alias DictChanges =
+    { insertions : Dict String Changes_
     , deletions : Set String
     }
 
 
-type alias SetDiff =
-    { insertions : List Changes
+type alias SetChanges =
+    { insertions : List Changes_
     , deletions : List Int
     }
 
 
-type alias ListDiff =
-    List ListDiff2
+type alias ListChanges =
+    List ListChangeType
 
 
-type ListDiff2
-    = Added Changes
+type ListChangeType
+    = Added Changes_
     | Existing Int Int
 
 
@@ -86,20 +90,20 @@ type ListDiff2
 -- Use
 
 
-run : Differ a -> a -> a -> Diff a
+run : Differ a -> a -> a -> Changes a
 run (Differ differ) v1 v2 =
     Diff (differ.diff v1 v2)
 
 
-patch : Differ a -> Diff a -> a -> Maybe a
-patch (Differ differ) (Diff changes) v1 =
+patch : Differ a -> Changes a -> a -> a
+patch differ diff old =
+    safePatch differ diff old
+        |> Result.withDefault old
+
+
+safePatch : Differ a -> Changes a -> a -> Result Error a
+safePatch (Differ differ) (Diff changes) v1 =
     differ.patch changes v1
-
-
-yoloPatch : Differ c -> Diff c -> c -> c
-yoloPatch differ diff old =
-    patch differ diff old
-        |> Maybe.withDefault old
 
 
 
@@ -118,10 +122,10 @@ unit =
             \changes _ ->
                 case changes of
                     Changes [] ->
-                        Just ()
+                        Ok ()
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = \() -> "()"
         , fromString = \_ -> Just ()
         }
@@ -143,13 +147,13 @@ bool =
             \changes oldBool ->
                 case changes of
                     BoolChange newBool ->
-                        Just newBool
+                        Ok newBool
 
                     Changes [] ->
-                        Just oldBool
+                        Ok oldBool
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = \_ -> ""
         , fromString = \_ -> Just True
         }
@@ -171,13 +175,13 @@ char =
             \changes oldChar ->
                 case changes of
                     CharChange newChar ->
-                        Just newChar
+                        Ok newChar
 
                     Changes [] ->
-                        Just oldChar
+                        Ok oldChar
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = String.fromChar
         , fromString = String.uncons >> Maybe.map Tuple.first
         }
@@ -199,13 +203,13 @@ float =
             \changes oldFloat ->
                 case changes of
                     FloatChange newFloat ->
-                        Just newFloat
+                        Ok newFloat
 
                     Changes [] ->
-                        Just oldFloat
+                        Ok oldFloat
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = String.fromFloat
         , fromString = String.toFloat
         }
@@ -227,13 +231,13 @@ int =
             \changes oldInt ->
                 case changes of
                     IntChange newInt ->
-                        Just newInt
+                        Ok newInt
 
                     Changes [] ->
-                        Just oldInt
+                        Ok oldInt
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = String.fromInt
         , fromString = String.toInt
         }
@@ -255,22 +259,19 @@ string =
             \changes oldString ->
                 case changes of
                     StringChange newString ->
-                        Just newString
+                        Ok newString
 
                     Changes [] ->
-                        Just oldString
+                        Ok oldString
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = identity
         , fromString = Just
         }
 
 
-dict :
-    Differ comparable
-    -> Differ value
-    -> Differ (Dict comparable value)
+dict : Differ comparable -> Differ value -> Differ (Dict comparable value)
 dict (Differ { toString, fromString }) (Differ valueDiffer) =
     Differ
         { index = 0
@@ -333,9 +334,11 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                                                         case maybeOldValue of
                                                             Just oldValue ->
                                                                 valueDiffer.patch insertionChanges oldValue
+                                                                    |> Result.toMaybe
 
                                                             Nothing ->
                                                                 valueDiffer.patch insertionChanges valueDiffer.default
+                                                                    |> Result.toMaybe
                                                     )
                                                     out
 
@@ -345,21 +348,19 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                                     newDictAfterDeletions
                                     insertions
                         in
-                        Just newDictAfterDeletionsAndInsertions
+                        Ok newDictAfterDeletionsAndInsertions
 
                     Changes [] ->
-                        Just oldDict
+                        Ok oldDict
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = always ""
         , fromString = always (Just Dict.empty)
         }
 
 
-set :
-    Differ comparable
-    -> Differ (Set comparable)
+set : Differ comparable -> Differ (Set comparable)
 set (Differ itemDiffer) =
     Differ
         { index = 0
@@ -410,30 +411,28 @@ set (Differ itemDiffer) =
                                 List.foldl
                                     (\insertionChanges out ->
                                         case itemDiffer.patch insertionChanges itemDiffer.default of
-                                            Just item ->
+                                            Ok item ->
                                                 Set.insert item out
 
-                                            Nothing ->
+                                            Err _ ->
                                                 out
                                     )
                                     newSetAfterDeletions
                                     insertions
                         in
-                        Just newSetAfterDeletionsAndInsertions
+                        Ok newSetAfterDeletionsAndInsertions
 
                     Changes [] ->
-                        Just oldSet
+                        Ok oldSet
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = always ""
         , fromString = always (Just Set.empty)
         }
 
 
-list :
-    Differ a
-    -> Differ (List a)
+list : Differ a -> Differ (List a)
 list (Differ itemDiffer) =
     Differ
         { index = 0
@@ -481,13 +480,14 @@ list (Differ itemDiffer) =
             \changes oldList ->
                 case changes of
                     ListChange cs ->
-                        Just
+                        Ok
                             (List.foldl
                                 (\change out ->
                                     case change of
                                         Added itemDiff ->
                                             (itemDiffer.default
                                                 |> itemDiffer.patch itemDiff
+                                                |> Result.toMaybe
                                                 |> Maybe.map List.singleton
                                             )
                                                 :: out
@@ -507,10 +507,10 @@ list (Differ itemDiffer) =
                             )
 
                     Changes [] ->
-                        Just oldList
+                        Ok oldList
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = always ""
         , fromString = always (Just [])
         }
@@ -530,7 +530,7 @@ pure v =
                 Changes []
         , patch =
             \_ _ ->
-                Just v
+                Ok v
         , toString = always ""
         , fromString = always Nothing
         }
@@ -580,10 +580,10 @@ andMap getter (Differ this) (Differ prev) =
 
                                 else
                                     ( prev.patch (Changes patches) old
-                                    , Just thisOld
+                                    , Ok thisOld
                                     )
                         in
-                        Maybe.map2
+                        Result.map2
                             (\ctor thisValue -> ctor thisValue)
                             maybeCtor
                             maybeThisValue
@@ -596,12 +596,12 @@ andMap getter (Differ this) (Differ prev) =
                             thisValue =
                                 getter old
                         in
-                        Maybe.map
+                        Result.map
                             (\ctor -> ctor thisValue)
                             maybeCtor
 
                     _ ->
-                        Nothing
+                        Err Error
         , toString = always ""
         , fromString = always Nothing
         }
