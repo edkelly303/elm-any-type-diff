@@ -85,7 +85,8 @@ complexTest () =
                 )
 
         fuzzer =
-            F.list
+            F.listOfLengthBetween 0
+                16
                 (F.map3 (\a b c -> { a = a, b = b, c = c })
                     (dictFuzzer F.int (F.floatRange 0.0 1.0))
                     (setFuzzer F.char)
@@ -101,13 +102,13 @@ complexTest () =
 
 dictFuzzer : Fuzzer comparable -> Fuzzer v -> Fuzzer (Dict.Dict comparable v)
 dictFuzzer k v =
-    F.list (F.pair k v)
+    F.listOfLengthBetween 0 16 (F.pair k v)
         |> F.map Dict.fromList
 
 
 setFuzzer : Fuzzer comparable -> Fuzzer (Set.Set comparable)
 setFuzzer m =
-    F.list m
+    F.listOfLengthBetween 0 16 m
         |> F.map Set.fromList
 
 
