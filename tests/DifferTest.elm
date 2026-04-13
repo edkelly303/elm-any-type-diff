@@ -80,7 +80,8 @@ complexTest () =
                 (Differ.pure (\a b c -> { a = a, b = b, c = c })
                     |> Differ.andMap .a (Differ.dict Differ.int Differ.float)
                     |> Differ.andMap .b (Differ.set Differ.char)
-                    |> Differ.andMap .c Differ.string
+                    |> Differ.andMap .c
+                        (Differ.map .x (\x -> { x = x }) Differ.string)
                 )
 
         fuzzer =
@@ -88,7 +89,7 @@ complexTest () =
                 (F.map3 (\a b c -> { a = a, b = b, c = c })
                     (dictFuzzer F.int (F.floatRange 0.0 1.0))
                     (setFuzzer F.char)
-                    F.string
+                    (F.map (\x -> { x = x }) F.string)
                 )
     in
     fuzzTest fuzzer differ "complex"
