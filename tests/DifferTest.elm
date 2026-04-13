@@ -15,6 +15,7 @@ suite =
         , setTest ()
         , listTest ()
         , complexTest ()
+        , customTest ()
         ]
 
 
@@ -94,6 +95,36 @@ complexTest () =
                 )
     in
     fuzzTest fuzzer differ "complex"
+
+
+type Custom
+    = A Int
+    | B String
+
+
+customTest () =
+    let
+        differ =
+            Differ.custom
+                (\ok err variant ->
+                    case variant of
+                        A a ->
+                            ok a
+
+                        B b ->
+                            err b
+                )
+                |> Differ.variant1 A Differ.int
+                |> Differ.variant1 B Differ.string
+                |> Differ.endCustom
+
+        fuzzer =
+            F.oneOf
+                [ F.map A F.int
+                , F.map B F.string
+                ]
+    in
+    fuzzTest fuzzer differ "custom"
 
 
 

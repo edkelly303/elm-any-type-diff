@@ -600,56 +600,97 @@ size changes =
 -- Composition
 
 
+type Custom dtor ctors differs blank getters setters makeDestructor makeDiff makePatch
+    = Custom
+        { dtor : dtor
+        , ctors : ctors
+        , differs : differs
+        , blank : blank
+        , getters : getters
+        , setters : setters
+        , makeDestructor : makeDestructor
+        , makeDiff : makeDiff
+        , makePatch : makePatch
+        }
+
+
 custom dtor =
-    { dtor = dtor
-    , ctors = NT.define
-    , differs = NT.define
-    , blank = NT.define
-    , getters = NT.defineGetters
-    , setters = NT.defineSetters
-    , makeDestructor = NT.define
-    , makeDiff = NT.define
-    }
+    Custom
+        { dtor = dtor
+        , ctors = NT.define
+        , differs = NT.define
+        , blank = NT.define
+        , getters = NT.defineGetters
+        , setters = NT.defineSetters
+        , makeDestructor = NT.define
+        , makeDiff = NT.define
+        , makePatch = NT.define
+        }
 
 
-variant1 ctor (Differ this) prev =
-    { dtor = prev.dtor
-    , ctors = NT.appender ctor prev.ctors
-    , differs = NT.appender this prev.differs
-    , blank = NT.appender Nothing prev.blank
-    , getters = NT.getter prev.getters
-    , setters = NT.setter prev.setters
-    , makeDestructor =
-        NT.folder
-            (\setter acc ->
-                { blank = acc.blank
-                , dtor = acc.dtor (\v -> setter (Just v) acc.blank)
-                }
-            )
-            prev.makeDestructor
-    , makeDiff =
-        NT.folder2
-            (\getter differ { old, new, idx, out } ->
-                { old = old
-                , new = new
-                , idx = idx + 1
-                , out =
-                    case ( getter old, getter new ) of
-                        ( Just oldV, Just newV ) ->
-                            Just (CustomChanges idx (differ.diff oldV newV))
+variant1 ctor (Differ this) (Custom prev) =
+    Custom
+        { dtor = prev.dtor
+        , ctors = NT.appender ctor prev.ctors
+        , differs = NT.appender this prev.differs
+        , blank = NT.appender Nothing prev.blank
+        , getters = NT.getter prev.getters
+        , setters = NT.setter prev.setters
+        , makeDestructor =
+            NT.folder
+                (\setter acc ->
+                    { blank = acc.blank
+                    , dtor = acc.dtor (\v -> setter (Just v) acc.blank)
+                    }
+                )
+                prev.makeDestructor
+        , makeDiff =
+            NT.folder2
+                (\getter differ { old, new, idx, out } ->
+                    { old = old
+                    , new = new
+                    , idx = idx + 1
+                    , out =
+                        case ( getter old, getter new ) of
+                            ( Just oldV, Just newV ) ->
+                                Just (CustomChanges idx (differ.diff oldV newV))
 
-                        ( Nothing, Just newV ) ->
-                            Just (CustomChanges idx (differ.diff differ.default newV))
+                            ( Nothing, Just newV ) ->
+                                Just (CustomChanges idx (differ.diff differ.default newV))
 
-                        _ ->
-                            out
-                }
-            )
-            prev.makeDiff
-    }
+                            _ ->
+                                out
+                    }
+                )
+                prev.makeDiff
+        , makePatch =
+            NT.folder2
+                (\getter differ { idx, selectedIdx, change, old, out } ->
+                    { idx = idx + 1
+                    , selectedIdx = selectedIdx
+                    , old = old
+                    , change = change
+                    , out =
+                        case out of
+                            Ok new ->
+                                Ok new
+
+                            Err Error ->
+                                if idx == selectedIdx then
+                                    getter old
+                                        |> Maybe.withDefault differ.default
+                                        |> differ.patch change
+                                        |> Result.map ctor
+
+                                else
+                                    Err Error
+                    }
+                )
+                prev.makePatch
+        }
 
 
-endCustom prev =
+endCustom (Custom prev) =
     let
         blank =
             NT.endAppender prev.blank
@@ -678,6 +719,9 @@ endCustom prev =
 
         default =
             Tuple.first ctors (Tuple.first differs |> .default)
+
+        makePatch =
+            NT.endFolder2 prev.makePatch
     in
     Differ
         { index = 0
@@ -695,8 +739,22 @@ endCustom prev =
                     |> .out
                     |> Maybe.withDefault (Changes [])
         , patch =
-            \_ _ ->
-                Ok default
+            \changes old ->
+                case changes of
+                    CustomChanges selectedIdx change ->
+                        makePatch
+                            { idx = 0
+                            , selectedIdx = selectedIdx
+                            , change = change
+                            , old = destructor old
+                            , out = Err Error
+                            }
+                            getters
+                            differs
+                            |> .out
+
+                    _ ->
+                        Err Error
         , toString = always ""
         , fromString = always Nothing
         }

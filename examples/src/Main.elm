@@ -25,13 +25,9 @@ main =
             [ H.h3 [] [ H.text <| "output" ]
             , H.text <| Debug.toString output
             ]
-        ,    H.section []
+        , H.section []
             [ H.h3 [] [ H.text <| "output == new?" ]
             , H.text <| Debug.toString (output == new)
-            ]
-        , H.section [] 
-            [ H.h3 [] [ H.text <| "custom diff" ]
-            , H.text <| Debug.toString (Differ.run customDiffer (B False) (A 1))
             ]
         ]
 
@@ -59,28 +55,28 @@ customDiffer =
 type alias User =
     { name : String
     , isCool : { really : Bool }
-    , favouriteWords : Set.Set String
+    , prefers : Prefers
     }
+
+
+type Prefers
+    = Words (Set.Set String)
+    | Numbers Int
 
 
 old =
     [ ed
     , simon
-    , simon
-    , simon
+    , jeroen
     , leonardo
-    , leonardo
-    , leonardo
+    , mario
     ]
 
 
 new =
-    [ { ed | favouriteWords = Set.insert "oooh" ed.favouriteWords }
-    , simon
-    , simon
-    , simon
+    [ { ed | prefers = Words (Set.fromList [ "inconceivable!", "hello" ]) }
+    , jeroen
     , mario
-    , leonardo
     , leonardo
     ]
 
@@ -89,7 +85,7 @@ ed : User
 ed =
     { name = "Ed"
     , isCool = { really = False }
-    , favouriteWords = Set.fromList [ "hello" ]
+    , prefers = Words (Set.fromList [ "hello" ])
     }
 
 
@@ -97,7 +93,15 @@ simon : User
 simon =
     { name = "Simon"
     , isCool = { really = True }
-    , favouriteWords = Set.fromList [ "world" ]
+    , prefers = Words (Set.fromList [ "virtual", "dom" ])
+    }
+
+
+jeroen : User
+jeroen =
+    { name = "Jeroen"
+    , isCool = { really = True }
+    , prefers = Words (Set.fromList [ "elm-review" ])
     }
 
 
@@ -105,7 +109,7 @@ leonardo : User
 leonardo =
     { name = "Leonardo"
     , isCool = { really = True }
-    , favouriteWords = Set.fromList [ "wow" ]
+    , prefers = Numbers 1
     }
 
 
@@ -113,7 +117,7 @@ mario : User
 mario =
     { name = "Mario"
     , isCool = { really = True }
-    , favouriteWords = Set.fromList [ "hurray" ]
+    , prefers = Words (Set.fromList [ "lamdera" ])
     }
 
 
@@ -126,7 +130,20 @@ userDiffer =
     Differ.pure User
         |> Differ.andMap .name Differ.string
         |> Differ.andMap .isCool (Differ.map .really (\r -> { really = r }) Differ.bool)
-        |> Differ.andMap .favouriteWords (Differ.set Differ.string)
+        |> Differ.andMap .prefers
+            (Differ.custom
+                (\w n v ->
+                    case v of
+                        Words ws ->
+                            w ws
+
+                        Numbers ns ->
+                            n ns
+                )
+                |> Differ.variant1 Words (Differ.set Differ.string)
+                |> Differ.variant1 Numbers Differ.int
+                |> Differ.endCustom
+            )
 
 
 myDiff : Differ.Changes (List User)
