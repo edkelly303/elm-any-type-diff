@@ -78,6 +78,7 @@ type alias SetChanges =
 
 type ListChange
     = Added Changes_
+    | Updated Int Changes_
     | Existing Int Int
 
 
@@ -454,8 +455,8 @@ list (Differ itemDiffer) =
                                             }
 
                                         ListDiffer.Similar _ _ changes ->
-                                            { oldIdx = oldIdx -- this needs work, need to change Added to include an index
-                                            , out = Just (Added changes) :: out
+                                            { oldIdx = oldIdx + 1
+                                            , out = Just (Updated oldIdx changes) :: out
                                             }
 
                                         ListDiffer.NoChange _ ->
@@ -489,6 +490,15 @@ list (Differ itemDiffer) =
                                             )
                                                 :: out
 
+                                        Updated idx itemDiff ->
+                                            (List.Extra.getAt idx oldList
+                                                |> Maybe.withDefault itemDiffer.default
+                                                |> itemDiffer.patch itemDiff
+                                                |> Result.toMaybe
+                                                |> Maybe.map List.singleton
+                                            )
+                                                :: out
+
                                         Existing start end ->
                                             (oldList
                                                 |> List.drop start
@@ -515,8 +525,15 @@ list (Differ itemDiffer) =
 
 areSimilar : Differ a -> a -> a -> Maybe Changes_
 areSimilar (Differ itemDiffer) old new =
-    if size (itemDiffer.diff old new) < size (itemDiffer.diff itemDiffer.default new) then
-        Just (itemDiffer.diff old new)
+    let
+        oldNewDiff =
+            itemDiffer.diff old new
+
+        defaultNewDiff =
+            itemDiffer.diff itemDiffer.default new
+    in
+    if size oldNewDiff < size defaultNewDiff then
+        Just oldNewDiff
 
     else
         Nothing
@@ -524,42 +541,54 @@ areSimilar (Differ itemDiffer) old new =
 
 size : Changes_ -> Int
 size changes =
-    let
-        help total changes_ =
-            case changes_ of
-                Changes cs ->
-                    List.foldl (\( _, c ) tot -> help tot c) total cs
+    case changes of
+        Changes cs ->
+            List.map (\( _, c ) -> size c) cs
+                |> List.sum
 
-                DictChange cs ->
-                    Set.size cs.deletions
-                        + (cs.insertions
-                            |> Dict.values
-                            |> List.foldl (\c tot -> help tot c) total
-                          )
+        DictChange { insertions, deletions } ->
+            Set.size deletions
+                + (Dict.values insertions
+                    |> List.map size
+                    |> List.sum
+                  )
 
-                SetChange cs ->
-                    List.length cs.deletions
-                        + (cs.insertions
-                            |> List.foldl (\c tot -> help tot c) total
-                          )
+        SetChange { insertions, deletions } ->
+            List.length deletions
+                + (List.map size insertions
+                    |> List.sum
+                  )
 
-                ListChange cs ->
-                    List.foldl
-                        (\c tot ->
-                            case c of
-                                Added cs_ ->
-                                    help tot cs_
+        ListChange cs ->
+            List.map
+                (\c ->
+                    case c of
+                        Added addedC ->
+                            size addedC
 
-                                Existing _ _ ->
-                                    tot + 1
-                        )
-                        total
-                        cs
+                        Updated _ updatedC ->
+                            size updatedC
 
-                _ ->
-                    1
-    in
-    help 0 changes
+                        Existing _ _ ->
+                            1
+                )
+                cs
+                |> List.sum
+
+        BoolChange _ ->
+            1
+
+        IntChange _ ->
+            1
+
+        FloatChange _ ->
+            1
+
+        CharChange _ ->
+            1
+
+        StringChange _ ->
+            1
 
 
 
