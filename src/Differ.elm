@@ -80,6 +80,7 @@ type alias SetChanges =
 
 type ListChange
     = Added Changes_
+    | Moved Int
     | Updated Int Changes_
     | Existing Int Int
 
@@ -448,7 +449,13 @@ list (Differ itemDiffer) =
                                     case change of
                                         ListDiffer.Added newItem ->
                                             { idx = idx
-                                            , out = Just (Added (itemDiffer.diff itemDiffer.default newItem)) :: out
+                                            , out =
+                                                case List.Extra.elemIndex newItem oldList of
+                                                    Just oldIdx ->
+                                                        Just (Moved oldIdx) :: out
+
+                                                    Nothing ->
+                                                        Just (Added (itemDiffer.diff itemDiffer.default newItem)) :: out
                                             }
 
                                         ListDiffer.Removed _ ->
@@ -488,6 +495,12 @@ list (Differ itemDiffer) =
                                             (itemDiffer.default
                                                 |> itemDiffer.patch itemDiff
                                                 |> Result.toMaybe
+                                                |> Maybe.map List.singleton
+                                            )
+                                                :: out
+
+                                        Moved idx ->
+                                            (List.Extra.getAt idx oldList
                                                 |> Maybe.map List.singleton
                                             )
                                                 :: out
@@ -570,6 +583,9 @@ size changes =
                     case c of
                         Added addedC ->
                             size addedC
+
+                        Moved _ ->
+                            1
 
                         Updated _ updatedC ->
                             size updatedC
