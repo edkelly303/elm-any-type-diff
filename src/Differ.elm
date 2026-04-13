@@ -1,7 +1,7 @@
 module Differ exposing
     ( Differ, Changes, Error, run, patch, safePatch
     , unit, bool, int, float, char, string, dict, set, list
-    , Combinator, pure, map, andMap
+    , Combinator, pure, map, andMap, custom, variant1, endCustom
     )
 
 {-|
@@ -19,13 +19,14 @@ module Differ exposing
 
 # Composing differs
 
-@docs Combinator, pure, map, andMap
+@docs Combinator, pure, map, andMap, custom, variant1, endCustom
 
 -}
 
 import Dict exposing (Dict)
 import Diff as ListDiffer
 import List.Extra
+import NestedTuple as NT
 import Set exposing (Set)
 
 
@@ -54,6 +55,7 @@ type Changes input
 
 type Changes_
     = Changes (List ( Int, Changes_ ))
+    | CustomChanges Int Changes_
     | BoolChange Bool
     | IntChange Int
     | FloatChange Float
@@ -442,35 +444,35 @@ list (Differ itemDiffer) =
                     ListChange
                         (ListDiffer.diffWith (areSimilar (Differ itemDiffer)) oldList newList
                             |> List.foldl
-                                (\change { oldIdx, out } ->
+                                (\change { idx, out } ->
                                     case change of
-                                        ListDiffer.Added a ->
-                                            { oldIdx = oldIdx
-                                            , out = Just (Added (itemDiffer.diff itemDiffer.default a)) :: out
+                                        ListDiffer.Added newItem ->
+                                            { idx = idx
+                                            , out = Just (Added (itemDiffer.diff itemDiffer.default newItem)) :: out
                                             }
 
                                         ListDiffer.Removed _ ->
-                                            { oldIdx = oldIdx + 1
+                                            { idx = idx + 1
                                             , out = Nothing :: out
                                             }
 
                                         ListDiffer.Similar _ _ changes ->
-                                            { oldIdx = oldIdx + 1
-                                            , out = Just (Updated oldIdx changes) :: out
+                                            { idx = idx + 1
+                                            , out = Just (Updated idx changes) :: out
                                             }
 
                                         ListDiffer.NoChange _ ->
-                                            { oldIdx = oldIdx + 1
+                                            { idx = idx + 1
                                             , out =
                                                 case out of
                                                     (Just (Existing prevStart _)) :: rest ->
-                                                        Just (Existing prevStart oldIdx) :: rest
+                                                        Just (Existing prevStart idx) :: rest
 
                                                     _ ->
-                                                        Just (Existing oldIdx oldIdx) :: out
+                                                        Just (Existing idx idx) :: out
                                             }
                                 )
-                                { oldIdx = 0, out = [] }
+                                { idx = 0, out = [] }
                             |> .out
                             |> List.filterMap identity
                         )
@@ -546,6 +548,9 @@ size changes =
             List.map (\( _, c ) -> size c) cs
                 |> List.sum
 
+        CustomChanges _ cs ->
+            size cs
+
         DictChange { insertions, deletions } ->
             Set.size deletions
                 + (Dict.values insertions
@@ -595,17 +600,119 @@ size changes =
 -- Composition
 
 
-pure : output -> Combinator input output
-pure v =
+custom dtor =
+    { dtor = dtor
+    , ctors = NT.define
+    , differs = NT.define
+    , blank = NT.define
+    , getters = NT.defineGetters
+    , setters = NT.defineSetters
+    , makeDestructor = NT.define
+    , makeDiff = NT.define
+    }
+
+
+variant1 ctor (Differ this) prev =
+    { dtor = prev.dtor
+    , ctors = NT.appender ctor prev.ctors
+    , differs = NT.appender this prev.differs
+    , blank = NT.appender Nothing prev.blank
+    , getters = NT.getter prev.getters
+    , setters = NT.setter prev.setters
+    , makeDestructor =
+        NT.folder
+            (\setter acc ->
+                { blank = acc.blank
+                , dtor = acc.dtor (\v -> setter (Just v) acc.blank)
+                }
+            )
+            prev.makeDestructor
+    , makeDiff =
+        NT.folder2
+            (\getter differ { old, new, idx, out } ->
+                { old = old
+                , new = new
+                , idx = idx + 1
+                , out =
+                    case ( getter old, getter new ) of
+                        ( Just oldV, Just newV ) ->
+                            Just (CustomChanges idx (differ.diff oldV newV))
+
+                        ( Nothing, Just newV ) ->
+                            Just (CustomChanges idx (differ.diff differ.default newV))
+
+                        _ ->
+                            out
+                }
+            )
+            prev.makeDiff
+    }
+
+
+endCustom prev =
+    let
+        blank =
+            NT.endAppender prev.blank
+
+        ctors =
+            NT.endAppender prev.ctors
+
+        differs =
+            NT.endAppender prev.differs
+
+        getters =
+            NT.endGetters prev.getters
+
+        setters =
+            NT.endSetters prev.setters
+
+        makeDestructor =
+            NT.endFolder prev.makeDestructor
+
+        destructor =
+            makeDestructor { blank = blank, dtor = prev.dtor } setters
+                |> .dtor
+
+        makeDiff =
+            NT.endFolder2 prev.makeDiff
+
+        default =
+            Tuple.first ctors (Tuple.first differs |> .default)
+    in
     Differ
         { index = 0
-        , default = v
+        , default = default
+        , diff =
+            \old new ->
+                makeDiff
+                    { old = destructor old
+                    , new = destructor new
+                    , idx = 0
+                    , out = Nothing
+                    }
+                    getters
+                    differs
+                    |> .out
+                    |> Maybe.withDefault (Changes [])
+        , patch =
+            \_ _ ->
+                Ok default
+        , toString = always ""
+        , fromString = always Nothing
+        }
+
+
+pure : output -> Combinator input output
+pure output =
+    Differ
+        { index = 0
+        , default = output
         , diff =
             \_ _ ->
                 Changes []
         , patch =
             \_ _ ->
-                Ok v
+                Ok output
         , toString = always ""
         , fromString = always Nothing
         }
@@ -687,5 +794,5 @@ map :
     -> (input -> output)
     -> Combinator input input
     -> Combinator output output
-map getter setter d =
-    pure setter |> andMap getter d
+map getter setter differ =
+    pure setter |> andMap getter differ

@@ -29,7 +29,31 @@ main =
             [ H.h3 [] [ H.text <| "output == new?" ]
             , H.text <| Debug.toString (output == new)
             ]
+        , H.section [] 
+            [ H.h3 [] [ H.text <| "custom diff" ]
+            , H.text <| Debug.toString (Differ.run customDiffer (B False) (A 1))
+            ]
         ]
+
+
+type Custom
+    = A Int
+    | B Bool
+
+
+customDiffer =
+    Differ.custom
+        (\a b variant ->
+            case variant of
+                A arg ->
+                    a arg
+
+                B arg ->
+                    b arg
+        )
+        |> Differ.variant1 A Differ.int
+        |> Differ.variant1 B Differ.bool
+        |> Differ.endCustom
 
 
 type alias User =
