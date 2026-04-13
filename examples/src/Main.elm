@@ -10,12 +10,12 @@ main : H.Html msg
 main =
     H.main_ []
         [ H.section []
-            [ H.h3 [] [ H.text <| "input (old)" ]
-            , H.text <| Debug.toString u1
+            [ H.h3 [] [ H.text <| "old" ]
+            , H.text <| Debug.toString old
             ]
         , H.section []
-            [ H.h3 [] [ H.text <| "input (new)" ]
-            , H.text <| Debug.toString u2
+            [ H.h3 [] [ H.text <| "new" ]
+            , H.text <| Debug.toString new
             ]
         , H.section []
             [ H.h3 [] [ H.text <| "diff" ]
@@ -24,6 +24,10 @@ main =
         , H.section []
             [ H.h3 [] [ H.text <| "output" ]
             , H.text <| Debug.toString output
+            ]
+        ,    H.section []
+            [ H.h3 [] [ H.text <| "output == new?" ]
+            , H.text <| Debug.toString (output == new)
             ]
         ]
 
@@ -35,7 +39,7 @@ type alias User =
     }
 
 
-u1 =
+old =
     [ ed
     , simon
     , simon
@@ -46,7 +50,7 @@ u1 =
     ]
 
 
-u2 =
+new =
     [ { ed | favouriteWords = Set.insert "oooh" ed.favouriteWords }
     , simon
     , simon
@@ -103,9 +107,9 @@ userDiffer =
 
 myDiff : Differ.Changes (List User)
 myDiff =
-    Differ.run userListDiffer u1 u2
+    Differ.run userListDiffer old new
 
 
 output : List User
 output =
-    Differ.patch userListDiffer myDiff u1
+    Differ.patch userListDiffer myDiff old
