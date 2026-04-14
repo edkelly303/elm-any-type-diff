@@ -14,6 +14,7 @@ suite =
         [ dictTest ()
         , setTest ()
         , dictWithListKeysTest ()
+        , dictWithTupleKeysTest ()
         , listTest ()
         , productTest ()
         , complexTest ()
@@ -33,18 +34,6 @@ dictTest () =
     fuzzTest fuzzer differ "dict"
 
 
-setTest : () -> Test
-setTest () =
-    let
-        differ =
-            Differ.set Differ.string
-
-        fuzzer =
-            setFuzzer F.string
-    in
-    fuzzTest fuzzer differ "set"
-
-
 dictWithListKeysTest : () -> Test
 dictWithListKeysTest () =
     let
@@ -55,6 +44,35 @@ dictWithListKeysTest () =
             dictFuzzer (F.listOfLengthBetween 0 4 F.int) F.string
     in
     fuzzTest fuzzer differ "dictWithListKeys"
+
+
+dictWithTupleKeysTest : () -> Test
+dictWithTupleKeysTest () =
+    let
+        differ =
+            Differ.dict
+                (Differ.pure Tuple.pair
+                    |> Differ.andMap Tuple.first Differ.int
+                    |> Differ.andMap Tuple.second Differ.float
+                )
+                Differ.string
+
+        fuzzer =
+            dictFuzzer (F.pair F.int F.float) F.string
+    in
+    fuzzTest fuzzer differ "dictWithTupleKeys"
+
+
+setTest : () -> Test
+setTest () =
+    let
+        differ =
+            Differ.set Differ.string
+
+        fuzzer =
+            setFuzzer F.string
+    in
+    fuzzTest fuzzer differ "set"
 
 
 listTest : () -> Test

@@ -1043,6 +1043,10 @@ andMap getter (Differ this) (Differ prev) =
                 in
                 bracket "p{" "}" (prevString ++ separator ++ thisString)
         , fromString = always Nothing
+
+        -- TODO - switch to parsers here; this is needed in case someone wants
+        -- to use a Dict whose keys are comparable tuples. I've added a failing
+        -- test for this.
         }
 
 
