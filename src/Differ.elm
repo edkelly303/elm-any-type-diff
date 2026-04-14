@@ -1,7 +1,8 @@
 module Differ exposing
     ( Differ, Changes, Error, run, patch, safePatch
     , unit, bool, int, float, char, string, dict, set, list
-    , Combinator, pure, map, andMap, custom, variant1, endCustom
+    , Combinator, pure, map, andMap
+    , Custom, custom, variant1, endCustom
     )
 
 {-|
@@ -19,7 +20,15 @@ module Differ exposing
 
 # Composing differs
 
-@docs Combinator, pure, map, andMap, custom, variant1, endCustom
+
+## Record, tuple and triple types (product types)
+
+@docs Combinator, pure, map, andMap
+
+
+## Custom types (sum types)
+
+@docs Custom, custom, variant1, endCustom
 
 -}
 
@@ -30,10 +39,16 @@ import NestedTuple as NT
 import Set exposing (Set)
 
 
+{-| The core type for this package: under the cover, it's a set of functions
+that we can pass to `run` or `patch` to diff or patch Elm values.
+-}
 type alias Differ a =
     Combinator a a
 
 
+{-| A special type of `Differ` used for creating product types (records, tuples,
+triples).
+-}
 type Combinator input output
     = Differ
         { index : Int
@@ -45,10 +60,31 @@ type Combinator input output
         }
 
 
+{-| A special type of `Differ` used for creating custom/union/sum types.
+-}
+type Custom dtor ctors differs blank getters setters makeDestructor makeDiff makePatch
+    = Custom
+        { dtor : dtor
+        , ctors : ctors
+        , differs : differs
+        , blank : blank
+        , getters : getters
+        , setters : setters
+        , makeDestructor : makeDestructor
+        , makeDiff : makeDiff
+        , makePatch : makePatch
+        }
+
+
+{-| Possible errors that can occur during a `patch`.
+-}
 type Error
     = Error
 
 
+{-| A type that represents the changes/delta/diff between two values. Generated
+by `run`, consumed by `patch`.
+-}
 type Changes input
     = Diff Changes_
 
@@ -89,17 +125,27 @@ type ListChange
 -- Use
 
 
+{-| Run a `Differ` over two values of the same type, and generate a `Changes`
+value, which represents the changes/delta/diff between the first and second
+values.
+-}
 run : Differ a -> a -> a -> Changes a
-run (Differ differ) v1 v2 =
-    Diff (differ.diff v1 v2)
+run (Differ differ) old new =
+    Diff (differ.diff old new)
 
 
+{-| Use a `Changes` value to patch a value. In case of any errors during the
+patching process, just return the old value.
+-}
 patch : Differ a -> Changes a -> a -> a
 patch differ diff old =
     safePatch differ diff old
         |> Result.withDefault old
 
 
+{-| Use a `Changes` value to patch a value. Return a `Result` in case there are
+any errors during the patching process.
+-}
 safePatch : Differ a -> Changes a -> a -> Result Error a
 safePatch (Differ differ) (Diff changes) v1 =
     differ.patch changes v1
@@ -109,6 +155,8 @@ safePatch (Differ differ) (Diff changes) v1 =
 -- Primitives
 
 
+{-| Differ for the `()` unit value.
+-}
 unit : Differ ()
 unit =
     Differ
@@ -130,6 +178,8 @@ unit =
         }
 
 
+{-| Differ for `Bool` values.
+-}
 bool : Differ Bool
 bool =
     Differ
@@ -158,6 +208,8 @@ bool =
         }
 
 
+{-| Differ for `Char` values.
+-}
 char : Differ Char
 char =
     Differ
@@ -186,6 +238,8 @@ char =
         }
 
 
+{-| Differ for `Float` values.
+-}
 float : Differ Float
 float =
     Differ
@@ -214,6 +268,8 @@ float =
         }
 
 
+{-| Differ for `Int` values.
+-}
 int : Differ Int
 int =
     Differ
@@ -242,6 +298,8 @@ int =
         }
 
 
+{-| Differ for `String` values.
+-}
 string : Differ String
 string =
     Differ
@@ -270,6 +328,8 @@ string =
         }
 
 
+{-| Differ for `Dict` values.
+-}
 dict : Differ comparable -> Differ value -> Differ (Dict comparable value)
 dict (Differ { toString, fromString }) (Differ valueDiffer) =
     Differ
@@ -359,6 +419,8 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
         }
 
 
+{-| Differ for `Set` values.
+-}
 set : Differ comparable -> Differ (Set comparable)
 set (Differ itemDiffer) =
     Differ
@@ -431,6 +493,8 @@ set (Differ itemDiffer) =
         }
 
 
+{-| Differ for `List` values.
+-}
 list : Differ a -> Differ (List a)
 list (Differ itemDiffer) =
     Differ
@@ -616,20 +680,21 @@ size changes =
 -- Composition
 
 
-type Custom dtor ctors differs blank getters setters makeDestructor makeDiff makePatch
-    = Custom
-        { dtor : dtor
-        , ctors : ctors
-        , differs : differs
-        , blank : blank
-        , getters : getters
-        , setters : setters
-        , makeDestructor : makeDestructor
-        , makeDiff : makeDiff
-        , makePatch : makePatch
-        }
-
-
+{-| Begin defining a `Differ` for a custom type
+-}
+custom :
+    dtor
+    ->
+        Custom
+            dtor
+            (a5 -> a5)
+            (a4 -> a4)
+            (a3 -> a3)
+            { appendToGetters : getters -> getters, focus : focus1 -> focus1 }
+            { appendToSetters : setters -> setters, focus : focus -> focus }
+            (a2 -> a2)
+            (a1 -> a1)
+            (a -> a)
 custom dtor =
     Custom
         { dtor = dtor
@@ -644,6 +709,90 @@ custom dtor =
         }
 
 
+{-| Add a one-argument variant to the definition of a `Differ` for a custom
+type.
+-}
+variant1 :
+    (a -> value)
+    -> Combinator input output
+    ->
+        Custom
+            dtor
+            (( a -> value, tail5 ) -> toAppender2)
+            (( { default : output
+               , diff : input -> input -> Changes_
+               , fromString : String -> Maybe input
+               , index : Int
+               , patch : Changes_ -> input -> Result Error output
+               , toString : input -> String
+               }
+             , tail4
+             )
+             -> toAppender1
+            )
+            (( Maybe a4, tail3 ) -> toAppender)
+            { appendToGetters : ( tuple1 -> head1, nextGetters ) -> toGetters
+            , focus : tuple1 -> ( head1, tail2 )
+            }
+            { appendToSetters : ( head -> tuple -> tuple, nextSetters ) -> toSetters
+            , focus : (( head, tail1 ) -> ( head, tail1 )) -> tuple -> tuple
+            }
+            (({ e | blank : b, dtor : (a3 -> c) -> d }
+              -> ( Maybe a3 -> b -> c, tail )
+              -> accForNext2
+             )
+             -> toFolder
+            )
+            (({ g | idx : Int, new : f, old : f, out : Maybe Changes_ }
+              -> ( f -> Maybe a2, tailA1 )
+              -> ( { h | default : a2, diff : a2 -> a2 -> Changes_ }, tailB1 )
+              -> accForNext1
+             )
+             -> toFolder2_1
+            )
+            (({ k
+                | change : i
+                , idx : number
+                , old : j
+                , out : Result Error value
+                , selectedIdx : number
+              }
+              -> ( j -> Maybe a1, tailA )
+              -> ( { l | default : a1, patch : i -> a1 -> Result Error a }, tailB )
+              -> accForNext
+             )
+             -> toFolder2
+            )
+    ->
+        Custom
+            dtor
+            (tail5 -> toAppender2)
+            (tail4 -> toAppender1)
+            (tail3 -> toAppender)
+            { appendToGetters : nextGetters -> toGetters, focus : tuple1 -> tail2 }
+            { appendToSetters : nextSetters -> toSetters
+            , focus : (tail1 -> tail1) -> tuple -> tuple
+            }
+            (({ blank : b, dtor : d } -> tail -> accForNext2) -> toFolder)
+            (({ idx : Int, new : f, old : f, out : Maybe Changes_ }
+              -> tailA1
+              -> tailB1
+              -> accForNext1
+             )
+             -> toFolder2_1
+            )
+            (({ change : i
+              , idx : number
+              , old : j
+              , out : Result Error value
+              , selectedIdx : number
+              }
+              -> tailA
+              -> tailB
+              -> accForNext
+             )
+             -> toFolder2
+            )
 variant1 ctor (Differ this) (Custom prev) =
     Custom
         { dtor = prev.dtor
@@ -706,6 +855,40 @@ variant1 ctor (Differ this) (Custom prev) =
         }
 
 
+{-| Complete the definition of a `Differ` for a custom type.
+-}
+endCustom :
+    Custom
+        dtor
+        (() -> ( b1 -> output, b2 ))
+        (() -> ( { c | default : b1 }, b ))
+        (() -> appender)
+        { appendToGetters : () -> getters, focus : focus1 }
+        { appendToSetters : () -> setters, focus : focus }
+        ((acc2 -> empty2 -> acc2)
+         -> { blank : appender, dtor : dtor }
+         -> setters
+         -> { e | dtor : input -> d }
+        )
+        ((acc1 -> empty1 -> empty1 -> acc1)
+         -> { idx : number, new : d, old : d, out : Maybe a }
+         -> getters
+         -> ( { c | default : b1 }, b )
+         -> { f | out : Maybe Changes_ }
+        )
+        ((acc -> empty -> empty -> acc)
+         ->
+            { change : Changes_
+            , idx : number1
+            , old : d
+            , out : Result Error value
+            , selectedIdx : Int
+            }
+         -> getters
+         -> ( { c | default : b1 }, b )
+         -> { g | out : Result Error output }
+        )
+    -> Combinator input output
 endCustom (Custom prev) =
     let
         blank =
@@ -776,6 +959,8 @@ endCustom (Custom prev) =
         }
 
 
+{-| Begin the definition of a `Differ` for a product type (a record, tuple or triple).
+-}
 pure : output -> Combinator input output
 pure output =
     Differ
@@ -792,6 +977,8 @@ pure output =
         }
 
 
+{-| Add a field/element to the definition of a `Differ` for a product type.
+-}
 andMap :
     (input -> field)
     -> Combinator field field
@@ -863,6 +1050,8 @@ andMap getter (Differ this) (Differ prev) =
         }
 
 
+{-| Map the value of a `Differ`
+-}
 map :
     (output -> input)
     -> (input -> output)
