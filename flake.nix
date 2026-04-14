@@ -36,12 +36,15 @@
           (cd $DEVDIR && git pull --quiet &)
           echo -e "Update complete!\n"
 
-          echo -e "\033[1;36mrun\033[0m         start the development environment"
-          alias run="(cd $DEVDIR && \
-          code . && \
-          cd examples && \
-          npx elm-watch@beta hot && \
-          xdg-open 'http://localhost:8008')"
+          echo -e "\033[1;36mrun\033[0m: start the development environment"
+
+          run () {
+            cd "$DEVDIR"
+            code .
+            (sleep 2; xdg-open 'http://localhost:8008') &
+            cd examples
+            npx elm-watch@beta hot
+          }
         '';
       };
     };
