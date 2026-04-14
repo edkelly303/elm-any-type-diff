@@ -33,12 +33,12 @@ userDiffer =
         |> Differ.andMap .age Differ.int
         |> Differ.andMap .hobbies (Differ.list Differ.string)
 
--- Then we generate `Changes`:
+-- Then we generate a `Delta`:
 
 changes = 
     Differ.run userDiffer oldUser newUser
 
--- And now we can use the `Changes` to patch 
+-- And now we can use the `Delta` to patch 
 -- the old user to match the new one:
 
 patchedUser = 
