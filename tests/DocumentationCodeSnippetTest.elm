@@ -20,7 +20,7 @@ tests =
                     "0"
                     (\() ->
                         patchedUser__Readme_0
-                            == newUser__Readme_0
+                            == Result.Ok newUser__Readme_0
                             |> Expect.equal Basics.True
                     )
                 ]

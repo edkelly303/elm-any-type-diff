@@ -26,8 +26,8 @@ main =
             , H.text <| Debug.toString output
             ]
         , H.section []
-            [ H.h3 [] [ H.text <| "output == new?" ]
-            , H.text <| Debug.toString (output == new)
+            [ H.h3 [] [ H.text <| "output == Ok new?" ]
+            , H.text <| Debug.toString (output == Ok new)
             ]
         ]
 
@@ -146,11 +146,11 @@ userDiffer =
             )
 
 
-myDiff : Differ.Changes (List User)
+myDiff : Differ.Delta (List User)
 myDiff =
     Differ.run userListDiffer old new
 
 
-output : List User
+output : Result Differ.Error (List User)
 output =
     Differ.patch userListDiffer myDiff old

@@ -12,7 +12,8 @@
         "edkelly303/elm-nested-tuples": "1.0.3 <= v < 2.0.0",
         "elm/core": "1.0.0 <= v < 2.0.0",
         "elmcraft/core-extra": "2.2.0 <= v < 3.0.0",
-        "miniBill/elm-diff": "1.1.1 <= v < 2.0.0"
+        "miniBill/elm-diff": "1.1.1 <= v < 2.0.0",
+        "robinheghan/fnv1a": "1.0.0 <= v < 2.0.0"
     },
     "test-dependencies": {
         "elm-explorations/test": "2.2.1 <= v < 3.0.0"

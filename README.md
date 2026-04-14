@@ -47,5 +47,5 @@ patchedUser =
 -- And confirm that the patched user is identical 
 -- to `newUser`:
 
-patchedUser == newUser --> True
+patchedUser == Ok newUser --> True
 ```
