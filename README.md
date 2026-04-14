@@ -35,14 +35,14 @@ userDiffer =
 
 -- Then we generate a `Delta`:
 
-changes = 
+delta = 
     Differ.run userDiffer oldUser newUser
 
 -- And now we can use the `Delta` to patch 
 -- the old user to match the new one:
 
 patchedUser = 
-    Differ.patch userDiffer changes oldUser
+    Differ.patch userDiffer delta oldUser
 
 -- And confirm that the patched user is identical 
 -- to `newUser`:
