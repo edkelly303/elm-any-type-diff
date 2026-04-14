@@ -79,7 +79,13 @@ type Custom dtor ctors differs blank getters setters makeDestructor makeDiff mak
         }
 
 
-{-| Possible errors that can occur during a `patch`.
+{-| Possible errors that can occur during a `patch`. 
+
+If you run a `Differ` on one value and then try to apply the `Delta` to a
+different value, you'll get a `MismatchedDelta` error.
+
+If there is a bug in the implementation of this package, you'll get a
+`FatalError`.
 -}
 type Error
     = FatalError
