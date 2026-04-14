@@ -1,5 +1,5 @@
 module Differ exposing
-    ( Differ, Changes, Error, run, patch, safePatch
+    ( Differ, Delta, Error, run, patch, safePatch
     , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
     , Custom, custom, variant1, endCustom
@@ -10,7 +10,7 @@ module Differ exposing
 
 # Diffing and patching
 
-@docs Differ, Changes, Error, run, patch, safePatch
+@docs Differ, Delta, Error, run, patch, safePatch
 
 
 # Primitive differs
@@ -53,8 +53,8 @@ type Combinator input output
     = Differ
         { index : Int
         , default : output
-        , diff : input -> input -> Changes_
-        , patch : Changes_ -> input -> Result Error output
+        , diff : input -> input -> Changes
+        , patch : Changes -> input -> Result Error output
         , toString : input -> String
         , fromString : String -> Maybe input
         }
@@ -82,16 +82,16 @@ type Error
     = Error
 
 
-{-| A type that represents the changes/delta/diff between two values. Generated
+{-| A type that represents the delta between two values. Generated
 by `run`, consumed by `patch`.
 -}
-type Changes input
-    = Diff Changes_
+type Delta input
+    = Delta Changes
 
 
-type Changes_
-    = Changes (List ( Int, Changes_ ))
-    | CustomChanges Int Changes_
+type Changes
+    = Changes (List ( Int, Changes ))
+    | CustomChanges Int Changes
     | BoolChange Bool
     | IntChange Int
     | FloatChange Float
@@ -103,21 +103,21 @@ type Changes_
 
 
 type alias DictChanges =
-    { insertions : Dict String Changes_
+    { insertions : Dict String Changes
     , deletions : Set String
     }
 
 
 type alias SetChanges =
-    { insertions : List Changes_
+    { insertions : List Changes
     , deletions : List Int
     }
 
 
 type ListChange
-    = Added Changes_
+    = Added Changes
     | Moved Int
-    | Updated Int Changes_
+    | Updated Int Changes
     | Existing Int Int
 
 
@@ -125,29 +125,29 @@ type ListChange
 -- Use
 
 
-{-| Run a `Differ` over two values of the same type, and generate a `Changes`
-value, which represents the changes/delta/diff between the first and second
+{-| Run a `Differ` over two values of the same type, and generate a `Delta`
+value, which represents the changes between the first and second
 values.
 -}
-run : Differ a -> a -> a -> Changes a
+run : Differ a -> a -> a -> Delta a
 run (Differ differ) old new =
-    Diff (differ.diff old new)
+    Delta (differ.diff old new)
 
 
-{-| Use a `Changes` value to patch a value. In case of any errors during the
+{-| Use a `Delta` value to patch a value. In case of any errors during the
 patching process, just return the old value.
 -}
-patch : Differ a -> Changes a -> a -> a
+patch : Differ a -> Delta a -> a -> a
 patch differ diff old =
     safePatch differ diff old
         |> Result.withDefault old
 
 
-{-| Use a `Changes` value to patch a value. Return a `Result` in case there are
+{-| Use a `Delta` value to patch a value. Return a `Result` in case there are
 any errors during the patching process.
 -}
-safePatch : Differ a -> Changes a -> a -> Result Error a
-safePatch (Differ differ) (Diff changes) v1 =
+safePatch : Differ a -> Delta a -> a -> Result Error a
+safePatch (Differ differ) (Delta changes) v1 =
     differ.patch changes v1
 
 
@@ -602,7 +602,7 @@ list (Differ itemDiffer) =
         }
 
 
-areSimilar : Differ a -> a -> a -> Maybe Changes_
+areSimilar : Differ a -> a -> a -> Maybe Changes
 areSimilar (Differ itemDiffer) old new =
     let
         oldNewDiff =
@@ -618,7 +618,7 @@ areSimilar (Differ itemDiffer) old new =
         Nothing
 
 
-size : Changes_ -> Int
+size : Changes -> Int
 size changes =
     case changes of
         Changes cs ->
@@ -720,10 +720,10 @@ variant1 :
             dtor
             (( a -> value, tail5 ) -> toAppender2)
             (( { default : output
-               , diff : input -> input -> Changes_
+               , diff : input -> input -> Changes
                , fromString : String -> Maybe input
                , index : Int
-               , patch : Changes_ -> input -> Result Error output
+               , patch : Changes -> input -> Result Error output
                , toString : input -> String
                }
              , tail4
@@ -743,9 +743,9 @@ variant1 :
              )
              -> toFolder
             )
-            (({ g | idx : Int, new : f, old : f, out : Maybe Changes_ }
+            (({ g | idx : Int, new : f, old : f, out : Maybe Changes }
               -> ( f -> Maybe a2, tailA1 )
-              -> ( { h | default : a2, diff : a2 -> a2 -> Changes_ }, tailB1 )
+              -> ( { h | default : a2, diff : a2 -> a2 -> Changes }, tailB1 )
               -> accForNext1
              )
              -> toFolder2_1
@@ -774,7 +774,7 @@ variant1 :
             , focus : (tail1 -> tail1) -> tuple -> tuple
             }
             (({ blank : b, dtor : d } -> tail -> accForNext2) -> toFolder)
-            (({ idx : Int, new : f, old : f, out : Maybe Changes_ }
+            (({ idx : Int, new : f, old : f, out : Maybe Changes }
               -> tailA1
               -> tailB1
               -> accForNext1
@@ -874,11 +874,11 @@ endCustom :
          -> { idx : number, new : d, old : d, out : Maybe a }
          -> getters
          -> ( { c | default : b1 }, b )
-         -> { f | out : Maybe Changes_ }
+         -> { f | out : Maybe Changes }
         )
         ((acc -> empty -> empty -> acc)
          ->
-            { change : Changes_
+            { change : Changes
             , idx : number1
             , old : d
             , out : Result Error value
