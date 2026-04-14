@@ -13,6 +13,7 @@ suite =
     describe "Round-trip tests"
         [ dictTest ()
         , setTest ()
+        , dictWithListKeysTest ()
         , listTest ()
         , productTest ()
         , complexTest ()
@@ -42,6 +43,18 @@ setTest () =
             setFuzzer F.string
     in
     fuzzTest fuzzer differ "set"
+
+
+dictWithListKeysTest : () -> Test
+dictWithListKeysTest () =
+    let
+        differ =
+            Differ.dict (Differ.list Differ.int) Differ.string
+
+        fuzzer =
+            dictFuzzer (F.listOfLengthBetween 0 4 F.int) F.string
+    in
+    fuzzTest fuzzer differ "dictWithListKeys"
 
 
 listTest : () -> Test

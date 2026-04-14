@@ -349,7 +349,7 @@ string =
                     _ ->
                         Err FatalError
         , toString = String.Extra.surround "\""
-        , fromString = Just
+        , fromString = String.Extra.unsurround "\"" >> Just
         }
 
 
@@ -455,7 +455,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                             |> String.join ", "
                 in
                 "d[ " ++ contents ++ " ]"
-        , fromString = always (Just Dict.empty)
+        , fromString = always Nothing
         }
 
 
@@ -537,7 +537,7 @@ set (Differ itemDiffer) =
                             |> String.join ", "
                 in
                 "s[ " ++ contents ++ " ]"
-        , fromString = always (Just Set.empty)
+        , fromString = always Nothing
         }
 
 
@@ -654,7 +654,10 @@ list (Differ itemDiffer) =
                             |> String.join ", "
                 in
                 "l[ " ++ contents ++ " ]"
-        , fromString = always (Just [])
+        , fromString = always Nothing
+
+        -- TODO - switch to parsers here; this is needed in case someone wants to use a Dict whose keys are `List
+        -- comparable`. I've added a failing test for this.
         }
 
 
