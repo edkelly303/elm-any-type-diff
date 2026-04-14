@@ -42,8 +42,7 @@
             cd "$DEVDIR"
             code .
             (sleep 2; xdg-open 'http://localhost:8008') &
-            cd examples
-            npx elm-watch@beta hot
+            npx run-pty run-pty.json
           }
         '';
       };

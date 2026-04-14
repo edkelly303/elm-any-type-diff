@@ -1,4 +1,4 @@
-module DifferTest exposing (..)
+module DifferTest exposing (suite)
 
 import Dict
 import Differ
@@ -8,12 +8,13 @@ import Set
 import Test exposing (..)
 
 
-suite : Test
+suite : Test.Test
 suite =
     describe "Round-trip tests"
         [ dictTest ()
         , setTest ()
         , listTest ()
+        , productTest ()
         , complexTest ()
         , customTest ()
         ]
