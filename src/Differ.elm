@@ -3,6 +3,7 @@ module Differ exposing
     , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
     , Custom, custom, variant1, endCustom
+    , test
     )
 
 {-|
@@ -30,15 +31,21 @@ module Differ exposing
 
 @docs Custom, custom, variant1, endCustom
 
+
+## Testing
+
+@docs test
+
 -}
 
 import Dict exposing (Dict)
 import Diff as ListDiffer
 import FNV1a
+import Helpers exposing (quoteString)
 import List.Extra
 import NestedTuple as NT
+import Parser exposing ((|.), (|=), Parser)
 import Set exposing (Set)
-import String.Extra
 
 
 {-| The core type for this package: under the cover, it's a set of functions
@@ -58,13 +65,13 @@ type Combinator input output
         , diff : input -> input -> Changes
         , patch : Changes -> input -> Result Error output
         , toString : input -> String
-        , fromString : String -> Maybe input
+        , parser : Parser output
         }
 
 
 {-| A special type of `Differ` used for creating custom/union/sum types.
 -}
-type Custom dtor ctors differs blank getters setters makeDestructor makeDiff makePatch makeToString
+type Custom dtor ctors differs blank getters setters makeDestructor makeDiff makePatch makeToString a
     = Custom
         { dtor : dtor
         , ctors : ctors
@@ -76,16 +83,18 @@ type Custom dtor ctors differs blank getters setters makeDestructor makeDiff mak
         , makeDiff : makeDiff
         , makePatch : makePatch
         , makeToString : makeToString
+        , parsers : List (Parser a)
         }
 
 
-{-| Possible errors that can occur during a `patch`. 
+{-| Possible errors that can occur during a `patch`.
 
 If you run a `Differ` on one value and then try to apply the `Delta` to a
 different value, you'll get a `MismatchedDelta` error.
 
 If there is a bug in the implementation of this package, you'll get a
 `FatalError`.
+
 -}
 type Error
     = FatalError
@@ -189,7 +198,7 @@ unit =
                     _ ->
                         Err FatalError
         , toString = \() -> "()"
-        , fromString = \_ -> Just ()
+        , parser = Parser.succeed ()
         }
 
 
@@ -225,17 +234,11 @@ bool =
 
                 else
                     "0"
-        , fromString =
-            \b ->
-                case b of
-                    "1" ->
-                        Just True
-
-                    "0" ->
-                        Just False
-
-                    _ ->
-                        Nothing
+        , parser =
+            Parser.oneOf
+                [ Helpers.chompOnly '1' |> Parser.map (always True)
+                , Helpers.chompOnly '0' |> Parser.map (always False)
+                ]
         }
 
 
@@ -265,7 +268,18 @@ char =
                     _ ->
                         Err FatalError
         , toString = \c -> "'" ++ String.fromChar c ++ "'"
-        , fromString = String.uncons >> Maybe.map Tuple.first
+        , parser =
+            Parser.chompIf (always True)
+                |> Parser.getChompedString
+                |> Parser.andThen
+                    (\str ->
+                        case String.uncons str of
+                            Just ( char_, _ ) ->
+                                Parser.succeed char_
+
+                            Nothing ->
+                                Parser.problem "Not a char"
+                    )
         }
 
 
@@ -295,7 +309,13 @@ float =
                     _ ->
                         Err FatalError
         , toString = String.fromFloat
-        , fromString = String.toFloat
+        , parser =
+            Parser.oneOf
+                [ Parser.succeed negate
+                    |. Parser.symbol "-"
+                    |= Parser.float
+                , Parser.float
+                ]
         }
 
 
@@ -325,7 +345,13 @@ int =
                     _ ->
                         Err FatalError
         , toString = String.fromInt
-        , fromString = String.toInt
+        , parser =
+            Parser.oneOf
+                [ Parser.succeed negate
+                    |. Parser.symbol "-"
+                    |= Parser.int
+                , Parser.int
+                ]
         }
 
 
@@ -354,15 +380,19 @@ string =
 
                     _ ->
                         Err FatalError
-        , toString = String.Extra.surround "\""
-        , fromString = String.Extra.unsurround "\"" >> Just
+        , toString = Helpers.quoteString
+        , parser = Helpers.quotedStringParser '/' '<'
         }
 
 
 {-| Differ for `Dict` values.
+
+_Warning_: Be careful if using `Float`s as keys in your `Dict`s. `NaN`, `Infinity`, and
+numbers larger than 9,007,199,254,740,991 may not work as expected.
+
 -}
 dict : Differ comparable -> Differ value -> Differ (Dict comparable value)
-dict (Differ { toString, fromString }) (Differ valueDiffer) =
+dict (Differ keyDiffer) (Differ valueDiffer) =
     Differ
         { index = 0
         , default = Dict.empty
@@ -373,7 +403,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
 
                 else
                     Dict.merge
-                        (\k _ out -> { out | deletions = Set.insert (toString k) out.deletions })
+                        (\k _ out -> { out | deletions = Set.insert (keyDiffer.toString k) out.deletions })
                         (\k oldValue newValue out ->
                             let
                                 valueDiff =
@@ -383,14 +413,14 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                                 out
 
                             else
-                                { out | insertions = Dict.insert (toString k) valueDiff out.insertions }
+                                { out | insertions = Dict.insert (keyDiffer.toString k) valueDiff out.insertions }
                         )
                         (\k newValue out ->
                             let
                                 valueDiff =
                                     valueDiffer.diff valueDiffer.default newValue
                             in
-                            { out | insertions = Dict.insert (toString k) valueDiff out.insertions }
+                            { out | insertions = Dict.insert (keyDiffer.toString k) valueDiff out.insertions }
                         )
                         oldDict
                         newDict
@@ -404,11 +434,11 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                             newDictAfterDeletions =
                                 Set.foldl
                                     (\k out ->
-                                        case fromString k of
-                                            Just comparableK ->
+                                        case Parser.run keyDiffer.parser k of
+                                            Ok comparableK ->
                                                 Dict.remove comparableK out
 
-                                            Nothing ->
+                                            Err _ ->
                                                 out
                                     )
                                     oldDict
@@ -417,8 +447,8 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                             newDictAfterDeletionsAndInsertions =
                                 Dict.foldl
                                     (\k insertionChanges out ->
-                                        case fromString k of
-                                            Just comparableK ->
+                                        case Parser.run keyDiffer.parser k of
+                                            Ok comparableK ->
                                                 Dict.update comparableK
                                                     (\maybeOldValue ->
                                                         case maybeOldValue of
@@ -432,7 +462,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                                                     )
                                                     out
 
-                                            Nothing ->
+                                            Err _ ->
                                                 out
                                     )
                                     newDictAfterDeletions
@@ -453,7 +483,7 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                             |> List.map
                                 (\( k, v ) ->
                                     "( "
-                                        ++ toString k
+                                        ++ keyDiffer.toString k
                                         ++ ", "
                                         ++ valueDiffer.toString v
                                         ++ " )"
@@ -461,7 +491,27 @@ dict (Differ { toString, fromString }) (Differ valueDiffer) =
                             |> String.join ", "
                 in
                 "d[ " ++ contents ++ " ]"
-        , fromString = always Nothing
+        , parser =
+            Parser.sequence
+                { start = "d["
+                , separator = ", "
+                , end = "]"
+                , spaces = Parser.spaces
+                , item =
+                    Parser.succeed Tuple.pair
+                        |. Parser.spaces
+                        |. Helpers.chompOnly '('
+                        |. Parser.spaces
+                        |= keyDiffer.parser
+                        |. Helpers.chompOnly ','
+                        |. Parser.spaces
+                        |= valueDiffer.parser
+                        |. Parser.spaces
+                        |. Helpers.chompOnly ')'
+                        |. Parser.spaces
+                , trailing = Parser.Forbidden
+                }
+                |> Parser.map Dict.fromList
         }
 
 
@@ -543,7 +593,16 @@ set (Differ itemDiffer) =
                             |> String.join ", "
                 in
                 "s[ " ++ contents ++ " ]"
-        , fromString = always Nothing
+        , parser =
+            Parser.sequence
+                { start = "s["
+                , separator = ", "
+                , end = "]"
+                , spaces = Parser.spaces
+                , item = itemDiffer.parser
+                , trailing = Parser.Forbidden
+                }
+                |> Parser.map Set.fromList
         }
 
 
@@ -660,10 +719,15 @@ list (Differ itemDiffer) =
                             |> String.join ", "
                 in
                 "l[ " ++ contents ++ " ]"
-        , fromString = always Nothing
-
-        -- TODO - switch to parsers here; this is needed in case someone wants to use a Dict whose keys are `List
-        -- comparable`. I've added a failing test for this.
+        , parser =
+            Parser.sequence
+                { start = "l["
+                , separator = ", "
+                , end = "]"
+                , spaces = Parser.spaces
+                , item = itemDiffer.parser
+                , trailing = Parser.Forbidden
+                }
         }
 
 
@@ -747,6 +811,21 @@ size changes =
 
 {-| Begin defining a `Differ` for a custom type
 -}
+custom :
+    dtor
+    ->
+        Custom
+            dtor
+            (a7 -> a7)
+            (a6 -> a6)
+            (a5 -> a5)
+            { appendToGetters : getters -> getters, focus : focus1 -> focus1 }
+            { appendToSetters : setters -> setters, focus : focus -> focus }
+            (a4 -> a4)
+            (a3 -> a3)
+            (a2 -> a2)
+            (a1 -> a1)
+            a
 custom dtor =
     Custom
         { dtor = dtor
@@ -759,12 +838,110 @@ custom dtor =
         , makeDiff = NT.define
         , makePatch = NT.define
         , makeToString = NT.define
+        , parsers = []
         }
 
 
 {-| Add a one-argument variant to the definition of a `Differ` for a custom
 type.
 -}
+variant1 :
+    (a2 -> a)
+    -> Combinator input a2
+    ->
+        Custom
+            dtor
+            (( a2 -> a, tail5 ) -> toAppender2)
+            (( { default : a2
+               , diff : input -> input -> Changes
+               , index : Int
+               , parser : Parser.Parser a2
+               , patch : Changes -> input -> Result Error a2
+               , toString : input -> String
+               }
+             , tail4
+             )
+             -> toAppender1
+            )
+            (( Maybe a6, tail3 ) -> toAppender)
+            { appendToGetters : ( tuple1 -> head1, nextGetters ) -> toGetters
+            , focus : tuple1 -> ( head1, tail2 )
+            }
+            { appendToSetters : ( head -> tuple -> tuple, nextSetters ) -> toSetters
+            , focus : (( head, tail1 ) -> ( head, tail1 )) -> tuple -> tuple
+            }
+            (({ e | blank : b, dtor : (a5 -> c) -> d }
+              -> ( Maybe a5 -> b -> c, tail )
+              -> accForNext3
+             )
+             -> toFolder
+            )
+            (({ g | idx : Int, new : f, old : f, out : Maybe Changes }
+              -> ( f -> Maybe a4, tailA2 )
+              -> ( { h | default : a4, diff : a4 -> a4 -> Changes }, tailB2 )
+              -> accForNext2
+             )
+             -> toFolder2_2
+            )
+            (({ k
+                | change : i
+                , idx : number
+                , old : j
+                , out : Result error1 a
+                , selectedIdx : number
+              }
+              -> ( j -> Maybe a3, tailA1 )
+              -> ( { l | default : a3, patch : i -> a3 -> Result Error a2 }, tailB1 )
+              -> accForNext1
+             )
+             -> toFolder2_1
+            )
+            (({ n | idx : Int, out : Result error String, value : m }
+              -> ( m -> Maybe a1, tailA )
+              -> ( { o | toString : a1 -> String }, tailB )
+              -> accForNext
+             )
+             -> toFolder2
+            )
+            a
+    ->
+        Custom
+            dtor
+            (tail5 -> toAppender2)
+            (tail4 -> toAppender1)
+            (tail3 -> toAppender)
+            { appendToGetters : nextGetters -> toGetters, focus : tuple1 -> tail2 }
+            { appendToSetters : nextSetters -> toSetters
+            , focus : (tail1 -> tail1) -> tuple -> tuple
+            }
+            (({ blank : b, dtor : d } -> tail -> accForNext3) -> toFolder)
+            (({ idx : Int, new : f, old : f, out : Maybe Changes }
+              -> tailA2
+              -> tailB2
+              -> accForNext2
+             )
+             -> toFolder2_2
+            )
+            (({ change : i
+              , idx : number
+              , old : j
+              , out : Result Error a
+              , selectedIdx : number
+              }
+              -> tailA1
+              -> tailB1
+              -> accForNext1
+             )
+             -> toFolder2_1
+            )
+            (({ idx : Int, out : Result error String, value : m }
+              -> tailA
+              -> tailB
+              -> accForNext
+             )
+             -> toFolder2
+            )
+            a
 variant1 ctor (Differ this) (Custom prev) =
     Custom
         { dtor = prev.dtor
@@ -847,11 +1024,51 @@ variant1 ctor (Differ this) (Custom prev) =
                     }
                 )
                 prev.makeToString
+        , parsers = Parser.map ctor this.parser :: prev.parsers
         }
 
 
 {-| Complete the definition of a `Differ` for a custom type.
 -}
+endCustom :
+    Custom
+        dtor
+        (() -> ( a -> output, b1 ))
+        (() -> ( { c | default : a }, b ))
+        (() -> appender)
+        { appendToGetters : () -> getters, focus : focus1 }
+        { appendToSetters : () -> setters, focus : focus }
+        ((acc3 -> empty3 -> acc3)
+         -> { blank : appender, dtor : dtor }
+         -> setters
+         -> { e | dtor : input -> d }
+        )
+        ((acc2 -> empty2 -> empty2 -> acc2)
+         -> { idx : number, new : d, old : d, out : Maybe a1 }
+         -> getters
+         -> ( { c | default : a }, b )
+         -> { f | out : Maybe Changes }
+        )
+        ((acc1 -> empty1 -> empty1 -> acc1)
+         ->
+            { change : Changes
+            , idx : number1
+            , old : d
+            , out : Result Error value1
+            , selectedIdx : Int
+            }
+         -> getters
+         -> ( { c | default : a }, b )
+         -> { g | out : Result Error output }
+        )
+        ((acc -> empty -> empty -> acc)
+         -> { idx : number2, out : Result Error value, value : d }
+         -> getters
+         -> ( { c | default : a }, b )
+         -> { h | out : Result x String }
+        )
+        output
+    -> Combinator input output
 endCustom (Custom prev) =
     let
         blank =
@@ -937,7 +1154,7 @@ endCustom (Custom prev) =
                     differs
                     |> .out
                     |> Result.withDefault ""
-        , fromString = always Nothing
+        , parser = Parser.oneOf prev.parsers
         }
 
 
@@ -954,8 +1171,8 @@ pure output =
         , patch =
             \_ _ ->
                 Ok output
-        , toString = always "{}"
-        , fromString = always Nothing
+        , toString = always ""
+        , parser = Parser.succeed output
         }
 
 
@@ -1030,15 +1247,13 @@ andMap getter (Differ this) (Differ prev) =
         , toString =
             \r ->
                 let
-                    prevString =
-                        unbracket (prev.toString r)
+                    ( prevString, separator ) =
+                        case prev.toString r of
+                            "" ->
+                                ( "", "" )
 
-                    separator =
-                        if String.isEmpty prevString then
-                            ""
-
-                        else
-                            ", "
+                            bracketed ->
+                                ( Helpers.unbracket 3 2 bracketed, ", " )
 
                     thisString =
                         String.concat
@@ -1047,25 +1262,19 @@ andMap getter (Differ this) (Differ prev) =
                             , getter r |> this.toString
                             ]
                 in
-                bracket "p{" "}" (prevString ++ separator ++ thisString)
-        , fromString = always Nothing
-
-        -- TODO - switch to parsers here; this is needed in case someone wants
-        -- to use a Dict whose keys are comparable tuples. I've added a failing
-        -- test for this.
+                Helpers.bracket "p{" "}" (prevString ++ separator ++ thisString)
+        , parser =
+            prev.parser
+                |= (Parser.succeed identity
+                        |. Parser.oneOf [ Parser.token "p{", Parser.succeed () ]
+                        |. Parser.spaces
+                        |. Parser.int
+                        |. Parser.token ": "
+                        |= this.parser
+                        |. Parser.spaces
+                        |. Parser.oneOf [ Parser.token "}", Parser.token "," ]
+                   )
         }
-
-
-bracket : String -> String -> String -> String
-bracket pre post str =
-    pre ++ " " ++ str ++ " " ++ post
-
-
-unbracket : String -> String
-unbracket str =
-    str
-        |> String.dropLeft 3
-        |> String.dropRight 2
 
 
 {-| Map the value of a `Differ`
@@ -1077,3 +1286,12 @@ map :
     -> Combinator output output
 map getter setter differ =
     pure setter |> andMap getter differ
+
+
+{-| Expose the internals of a `Differ` - only used for testing this package.
+-}
+test :
+    Combinator input output
+    -> { index : Int, default : output, diff : input -> input -> Changes, patch : Changes -> input -> Result Error output, toString : input -> String, parser : Parser output }
+test (Differ differ) =
+    differ
