@@ -16,14 +16,18 @@ suite =
         , floatParserTest ()
         , productParserTest ()
         , customParserTest ()
+        , intTest ()
+        , floatTest ()
+        , charTest ()
+        , stringTest ()
         , dictTest ()
-        , setTest ()
         , dictWithListKeysTest ()
         , dictWithTupleKeysTest ()
+        , setTest ()
         , listTest ()
         , productTest ()
-        , complexTest ()
         , customTest ()
+        , complexTest ()
         ]
 
 
@@ -163,6 +167,26 @@ dictWithTupleKeysTest () =
     fuzzTest fuzzer differ "dictWithTupleKeys"
 
 
+intTest : () -> Test
+intTest () =
+    fuzzTest Fuzz.int Differ.int "int"
+
+
+floatTest : () -> Test
+floatTest () =
+    fuzzTest myNiceFloat Differ.float "float"
+
+
+charTest : () -> Test
+charTest () =
+    fuzzTest Fuzz.char Differ.char "char"
+
+
+stringTest : () -> Test
+stringTest () =
+    fuzzTest Fuzz.string Differ.string "string"
+
+
 setTest : () -> Test
 setTest () =
     let
@@ -182,7 +206,7 @@ listTest () =
             Differ.list Differ.string
 
         fuzzer =
-            Fuzz.list Fuzz.string
+            Fuzz.listOfLengthBetween 0 16 Fuzz.string
     in
     fuzzTest fuzzer differ "list"
 
@@ -210,20 +234,22 @@ complexTest () =
     let
         differ =
             Differ.list
-                (Differ.pure (\a b c -> { a = a, b = b, c = c })
+                (Differ.pure (\a b c d -> { a = a, b = b, c = c, d = d })
                     |> Differ.andMap .a (Differ.dict Differ.int Differ.float)
                     |> Differ.andMap .b (Differ.set Differ.char)
                     |> Differ.andMap .c
                         (Differ.map .x (\x -> { x = x }) Differ.string)
+                    |> Differ.andMap .d customDiffer
                 )
 
         fuzzer =
             Fuzz.listOfLengthBetween 0
                 16
-                (Fuzz.map3 (\a b c -> { a = a, b = b, c = c })
+                (Fuzz.map4 (\a b c d -> { a = a, b = b, c = c, d = d })
                     (dictFuzzer Fuzz.int Fuzz.niceFloat)
                     (setFuzzer Fuzz.char)
                     (Fuzz.map (\x -> { x = x }) Fuzz.string)
+                    customFuzzer
                 )
     in
     fuzzTest fuzzer differ "complex"
@@ -234,30 +260,33 @@ type Custom
     | B String
 
 
+customDiffer : Differ.Differ Custom
+customDiffer =
+    Differ.custom
+        (\ok err variant ->
+            case variant of
+                A a ->
+                    ok a
+
+                B b ->
+                    err b
+        )
+        |> Differ.variant1 A Differ.int
+        |> Differ.variant1 B Differ.string
+        |> Differ.endCustom
+
+
+customFuzzer : Fuzzer Custom
+customFuzzer =
+    Fuzz.oneOf
+        [ Fuzz.map A Fuzz.int
+        , Fuzz.map B Fuzz.string
+        ]
+
+
 customTest : () -> Test
 customTest () =
-    let
-        differ =
-            Differ.custom
-                (\ok err variant ->
-                    case variant of
-                        A a ->
-                            ok a
-
-                        B b ->
-                            err b
-                )
-                |> Differ.variant1 A Differ.int
-                |> Differ.variant1 B Differ.string
-                |> Differ.endCustom
-
-        fuzzer =
-            Fuzz.oneOf
-                [ Fuzz.map A Fuzz.int
-                , Fuzz.map B Fuzz.string
-                ]
-    in
-    fuzzTest fuzzer differ "custom"
+    fuzzTest customFuzzer customDiffer "custom"
 
 
 
