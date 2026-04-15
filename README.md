@@ -48,4 +48,23 @@ patchedUser =
 -- to `newUser`:
 
 patchedUser == Ok newUser --> True
+
+-- But what happens if we accidentally mix up our users 
+-- and apply the Delta to the wrong person's record?
+
+wrongUser =
+    { name = "Arthur"
+    , age = 2
+    , hobbies = [ "gardening", "playing with toys" ]
+    }
+
+uhoh =
+    Differ.patch userDiffer delta wrongUser
+
+-- Fortunately, this package has got it covered! The 
+-- `Delta` includes a hash of the source value, and 
+-- if the target value doesn't have a matching hash,
+-- we just return an `Err`.
+
+uhoh --> Err Differ.MismatchedDelta
 ```

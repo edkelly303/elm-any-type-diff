@@ -1,5 +1,5 @@
 module Differ exposing
-    ( Differ, Delta, Error, run, patch
+    ( Differ, Delta, Error(..), run, patch
     , unit, bool, int, float, char, string, dict, set, list
     , Combinator, pure, map, andMap
     , Custom, custom, variant1, endCustom

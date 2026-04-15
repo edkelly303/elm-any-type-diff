@@ -23,6 +23,12 @@ tests =
                             == Result.Ok newUser__Readme_0
                             |> Expect.equal Basics.True
                     )
+                , Test.test
+                    "1"
+                    (\() ->
+                        uhoh__Readme_0
+                            |> Expect.equal (Result.Err Differ.MismatchedDelta)
+                    )
                 ]
             ]
         ]
@@ -54,3 +60,11 @@ delta__Readme_0 =
 
 patchedUser__Readme_0 =
     Differ.patch userDiffer__Readme_0 delta__Readme_0 oldUser__Readme_0
+
+
+wrongUser__Readme_0 =
+    { name = "Arthur", age = 2, hobbies = [ "gardening", "playing with toys" ] }
+
+
+uhoh__Readme_0 =
+    Differ.patch userDiffer__Readme_0 delta__Readme_0 wrongUser__Readme_0
