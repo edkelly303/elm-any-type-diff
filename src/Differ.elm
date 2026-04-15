@@ -41,7 +41,7 @@ module Differ exposing
 import Dict exposing (Dict)
 import Diff as ListDiffer
 import FNV1a
-import Helpers exposing (quoteString)
+import Helpers
 import List.Extra
 import NestedTuple as NT
 import Parser exposing ((|.), (|=), Parser)
