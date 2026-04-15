@@ -393,6 +393,16 @@ numbers larger than 9,007,199,254,740,991 may not work as expected.
 -}
 dict : Differ comparable -> Differ value -> Differ (Dict comparable value)
 dict (Differ keyDiffer) (Differ valueDiffer) =
+    let
+        opener =
+            "d["
+
+        closer =
+            "]"
+
+        separator =
+            ","
+    in
     Differ
         { index = 0
         , default = Dict.empty
@@ -482,33 +492,29 @@ dict (Differ keyDiffer) (Differ valueDiffer) =
                         Dict.toList d
                             |> List.map
                                 (\( k, v ) ->
-                                    "( "
-                                        ++ keyDiffer.toString k
-                                        ++ ", "
-                                        ++ valueDiffer.toString v
-                                        ++ " )"
+                                    [ keyDiffer.toString k
+                                    , separator
+                                    , valueDiffer.toString v
+                                    ]
+                                        |> String.concat
+                                        |> Helpers.bracket "(" ")"
                                 )
-                            |> String.join ", "
+                            |> String.join separator
                 in
-                "d[ " ++ contents ++ " ]"
+                Helpers.bracket opener closer contents
         , parser =
             Parser.sequence
-                { start = "d["
-                , separator = ", "
-                , end = "]"
+                { start = opener
+                , separator = separator
+                , end = closer
                 , spaces = Parser.spaces
                 , item =
                     Parser.succeed Tuple.pair
-                        |. Parser.spaces
-                        |. Helpers.chompOnly '('
-                        |. Parser.spaces
+                        |. Parser.token "("
                         |= keyDiffer.parser
-                        |. Helpers.chompOnly ','
-                        |. Parser.spaces
+                        |. Parser.token separator
                         |= valueDiffer.parser
-                        |. Parser.spaces
-                        |. Helpers.chompOnly ')'
-                        |. Parser.spaces
+                        |. Parser.token ")"
                 , trailing = Parser.Forbidden
                 }
                 |> Parser.map Dict.fromList
@@ -519,6 +525,16 @@ dict (Differ keyDiffer) (Differ valueDiffer) =
 -}
 set : Differ comparable -> Differ (Set comparable)
 set (Differ itemDiffer) =
+    let
+        opener =
+            "s["
+
+        closer =
+            "]"
+
+        separator =
+            ","
+    in
     Differ
         { index = 0
         , default = Set.empty
@@ -590,14 +606,14 @@ set (Differ itemDiffer) =
                     contents =
                         Set.toList s
                             |> List.map itemDiffer.toString
-                            |> String.join ", "
+                            |> String.join separator
                 in
-                "s[ " ++ contents ++ " ]"
+                Helpers.bracket opener closer contents
         , parser =
             Parser.sequence
-                { start = "s["
-                , separator = ", "
-                , end = "]"
+                { start = opener
+                , separator = separator
+                , end = closer
                 , spaces = Parser.spaces
                 , item = itemDiffer.parser
                 , trailing = Parser.Forbidden
@@ -610,6 +626,16 @@ set (Differ itemDiffer) =
 -}
 list : Differ a -> Differ (List a)
 list (Differ itemDiffer) =
+    let
+        opener =
+            "l["
+
+        closer =
+            "]"
+
+        separator =
+            ","
+    in
     Differ
         { index = 0
         , default = []
@@ -716,14 +742,14 @@ list (Differ itemDiffer) =
                     contents =
                         l
                             |> List.map itemDiffer.toString
-                            |> String.join ", "
+                            |> String.join separator
                 in
-                "l[ " ++ contents ++ " ]"
+                Helpers.bracket opener closer contents
         , parser =
             Parser.sequence
-                { start = "l["
-                , separator = ", "
-                , end = "]"
+                { start = opener
+                , separator = separator
+                , end = closer
                 , spaces = Parser.spaces
                 , item = itemDiffer.parser
                 , trailing = Parser.Forbidden
@@ -1011,11 +1037,9 @@ variant1 ctor (Differ this) (Custom prev) =
                             Just v ->
                                 Ok
                                     (String.concat
-                                        [ "c{ "
-                                        , String.fromInt idx
-                                        , ": "
+                                        [ String.fromInt idx
+                                        , ":"
                                         , differ.toString v
-                                        , " }"
                                         ]
                                     )
 
@@ -1071,6 +1095,12 @@ endCustom :
     -> Combinator input output
 endCustom (Custom prev) =
     let
+        opener =
+            "c{"
+
+        closer =
+            "}"
+
         blank =
             NT.endAppender prev.blank
 
@@ -1154,7 +1184,23 @@ endCustom (Custom prev) =
                     differs
                     |> .out
                     |> Result.withDefault ""
-        , parser = Parser.oneOf prev.parsers
+                    |> Helpers.bracket opener closer
+        , parser =
+            Parser.succeed identity
+                |. Parser.token opener
+                |= (Parser.int
+                        |> Parser.andThen
+                            (\idx ->
+                                Parser.succeed identity
+                                    |. Parser.token ":"
+                                    |= (prev.parsers
+                                            |> List.reverse
+                                            |> List.Extra.getAt idx
+                                            |> Maybe.withDefault (Parser.problem "invalid index")
+                                       )
+                            )
+                   )
+                |. Parser.token closer
         }
 
 
@@ -1184,6 +1230,16 @@ andMap :
     -> Combinator input (field -> output)
     -> Combinator input output
 andMap getter (Differ this) (Differ prev) =
+    let
+        opener =
+            "p{"
+
+        closer =
+            "}"
+
+        separator =
+            ","
+    in
     Differ
         { index = prev.index + 1
         , default = prev.default this.default
@@ -1247,32 +1303,37 @@ andMap getter (Differ this) (Differ prev) =
         , toString =
             \r ->
                 let
-                    ( prevString, separator ) =
+                    ( prevString, separator_ ) =
                         case prev.toString r of
                             "" ->
-                                ( "", "" )
+                                ( ""
+                                , ""
+                                )
 
                             bracketed ->
-                                ( Helpers.unbracket 3 2 bracketed, ", " )
+                                ( Helpers.unbracket opener closer bracketed
+                                , separator
+                                )
 
                     thisString =
                         String.concat
                             [ String.fromInt prev.index
-                            , ": "
+                            , ":"
                             , getter r |> this.toString
                             ]
                 in
-                Helpers.bracket "p{" "}" (prevString ++ separator ++ thisString)
+                Helpers.bracket opener closer (prevString ++ separator_ ++ thisString)
         , parser =
             prev.parser
                 |= (Parser.succeed identity
-                        |. Parser.oneOf [ Parser.token "p{", Parser.succeed () ]
-                        |. Parser.spaces
+                        |. Parser.oneOf [ Parser.token opener, Parser.succeed () ]
                         |. Parser.int
-                        |. Parser.token ": "
+                        |. Parser.token ":"
                         |= this.parser
-                        |. Parser.spaces
-                        |. Parser.oneOf [ Parser.token "}", Parser.token "," ]
+                        |. Parser.oneOf
+                            [ Parser.token closer
+                            , Parser.token separator
+                            ]
                    )
         }
 

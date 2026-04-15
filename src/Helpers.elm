@@ -35,15 +35,15 @@ chompOnly oneChar =
 
 
 bracket : String -> String -> String -> String
-bracket pre post str =
-    pre ++ " " ++ str ++ " " ++ post
+bracket opener closer str =
+    opener ++ str ++ closer
 
 
-unbracket : Int -> Int -> String -> String
-unbracket atStart atEnd str =
+unbracket : String -> String -> String -> String
+unbracket opener closer str =
     str
-        |> String.dropLeft atStart
-        |> String.dropRight atEnd
+        |> String.dropLeft (String.length opener)
+        |> String.dropRight (String.length closer)
 
 
 quoteString : String -> String

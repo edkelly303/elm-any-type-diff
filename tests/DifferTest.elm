@@ -15,6 +15,7 @@ suite =
         [ stringParserTest ()
         , floatParserTest ()
         , productParserTest ()
+        , customParserTest ()
         , dictTest ()
         , setTest ()
         , dictWithListKeysTest ()
@@ -81,6 +82,43 @@ productParserTest () =
             in
             ( str, out )
                 |> Expect.equal ( str, Ok tup )
+
+
+customParserTest () =
+    Test.fuzz
+        (Fuzz.oneOf
+            [ Fuzz.map A Fuzz.int
+            , Fuzz.map B Fuzz.string
+            ]
+        )
+        "custom parser"
+    <|
+        \cust ->
+            let
+                fs =
+                    Differ.test
+                        (Differ.custom
+                            (\ok err variant ->
+                                case variant of
+                                    A a ->
+                                        ok a
+
+                                    B b ->
+                                        err b
+                            )
+                            |> Differ.variant1 A Differ.int
+                            |> Differ.variant1 B Differ.string
+                            |> Differ.endCustom
+                        )
+
+                str =
+                    fs.toString cust
+
+                out =
+                    Parser.run fs.parser str
+            in
+            ( str, out )
+                |> Expect.equal ( str, Ok cust )
 
 
 dictTest : () -> Test
