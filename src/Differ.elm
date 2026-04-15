@@ -1353,6 +1353,13 @@ map getter setter differ =
 -}
 test :
     Combinator input output
-    -> { index : Int, default : output, diff : input -> input -> Changes, patch : Changes -> input -> Result Error output, toString : input -> String, parser : Parser output }
+    ->
+        { index : Int
+        , default : output
+        , diff : input -> input -> Changes
+        , patch : Changes -> input -> Result Error output
+        , toString : input -> String
+        , parser : Parser output
+        }
 test (Differ differ) =
     differ
