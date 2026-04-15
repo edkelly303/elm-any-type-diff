@@ -1,9 +1,9 @@
 [
     {
         "command": [
-            "npx",
-            "elm-watch@beta",
-            "hot"
+            "bash",
+            "-c",
+            "ELM_WATCH_OPEN_EDITOR='code --goto \"$file:$line:$column\"' npx elm-watch@beta hot"
         ],
         "cwd": "./examples",
         "title": "npx elm-watch@beta hot",
