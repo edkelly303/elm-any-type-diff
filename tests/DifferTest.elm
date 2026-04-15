@@ -84,6 +84,7 @@ productParserTest () =
                 |> Expect.equal ( str, Ok tup )
 
 
+customParserTest : () -> Test
 customParserTest () =
     Test.fuzz
         (Fuzz.oneOf
