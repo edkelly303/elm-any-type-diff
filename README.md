@@ -50,7 +50,7 @@ patchedUser =
 patchedUser == Ok newUser --> True
 
 -- But what happens if we accidentally mix up our users 
--- and apply the Delta to the wrong person's record?
+-- and apply the `Delta` to the wrong person's record?
 
 wrongUser =
     { name = "Arthur"
