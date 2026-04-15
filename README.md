@@ -1,5 +1,22 @@
 # Any type diff
 
+## What?
+
+A little package that helps to reduce the amount of data you need to send over
+the network when your Elm values change. Potentially useful if you're using
+Lamdera or some similar full-stack Elm framework that sends data between backend
+and frontend.
+
+## Why?
+
+I wrote this out of curiosity, not necessity, and it's almost certainly not the
+"right" way to produce minimal diffs efficiently. I am sure the many years of
+research into diffing algorithms by professional computer scientists will have
+resulted in something all-around better than my naive approach. But I tried and
+failed to understand Myers' algorithm, so this is what I came up with instead.
+
+## How?
+
 ```elm
 import Differ exposing (Differ)
 
@@ -68,3 +85,9 @@ uhoh =
 
 uhoh --> Err Differ.MismatchedDelta
 ```
+
+## What's next?
+
+- Serialize `Delta` values as `Bytes`, `Json`, etc.
+- Add `variant0`, `variant2`, `variant3` etc.
+- Figure out how to write `Differs` for recursive types.
