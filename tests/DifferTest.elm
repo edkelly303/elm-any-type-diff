@@ -3,15 +3,19 @@ module DifferTest exposing (suite)
 import Dict
 import Differ
 import Expect
-import Fuzz as F exposing (Fuzzer)
+import Fuzz exposing (Fuzzer)
+import Parser
 import Set
-import Test exposing (..)
+import Test exposing (Test)
 
 
 suite : Test.Test
 suite =
-    describe "Round-trip tests"
-        [ dictTest ()
+    Test.describe "Round-trip tests"
+        [ stringParserTest ()
+        , floatParserTest ()
+        , productParserTest ()
+        , dictTest ()
         , setTest ()
         , dictWithListKeysTest ()
         , dictWithTupleKeysTest ()
@@ -22,6 +26,63 @@ suite =
         ]
 
 
+floatParserTest : () -> Test
+floatParserTest () =
+    Test.fuzz myNiceFloat "float parser" <|
+        \flt ->
+            let
+                fs =
+                    Differ.test Differ.float
+
+                str =
+                    fs.toString flt
+            in
+            ( str
+            , Parser.run fs.parser str
+            )
+                |> Expect.equal ( str, Ok flt )
+
+
+stringParserTest : () -> Test
+stringParserTest () =
+    Test.fuzz Fuzz.string "string parser" <|
+        \str ->
+            let
+                fs =
+                    Differ.test Differ.string
+
+                quoted =
+                    fs.toString str
+            in
+            ( quoted
+            , quoted
+                |> Parser.run fs.parser
+            )
+                |> Expect.equal ( quoted, Ok str )
+
+
+productParserTest : () -> Test
+productParserTest () =
+    Test.fuzz (Fuzz.pair Fuzz.bool Fuzz.bool) "product parser" <|
+        \tup ->
+            let
+                fs =
+                    Differ.test
+                        (Differ.pure Tuple.pair
+                            |> Differ.andMap Tuple.first Differ.bool
+                            |> Differ.andMap Tuple.second Differ.bool
+                        )
+
+                str =
+                    fs.toString tup
+
+                out =
+                    Parser.run fs.parser str
+            in
+            ( str, out )
+                |> Expect.equal ( str, Ok tup )
+
+
 dictTest : () -> Test
 dictTest () =
     let
@@ -29,7 +90,7 @@ dictTest () =
             Differ.dict Differ.string Differ.int
 
         fuzzer =
-            dictFuzzer F.string F.int
+            dictFuzzer Fuzz.string Fuzz.int
     in
     fuzzTest fuzzer differ "dict"
 
@@ -41,7 +102,7 @@ dictWithListKeysTest () =
             Differ.dict (Differ.list Differ.int) Differ.string
 
         fuzzer =
-            dictFuzzer (F.listOfLengthBetween 0 4 F.int) F.string
+            dictFuzzer (Fuzz.listOfLengthBetween 0 4 Fuzz.int) Fuzz.string
     in
     fuzzTest fuzzer differ "dictWithListKeys"
 
@@ -58,7 +119,7 @@ dictWithTupleKeysTest () =
                 Differ.string
 
         fuzzer =
-            dictFuzzer (F.pair F.int F.float) F.string
+            dictFuzzer (Fuzz.pair Fuzz.int myNiceFloat) Fuzz.string
     in
     fuzzTest fuzzer differ "dictWithTupleKeys"
 
@@ -70,7 +131,7 @@ setTest () =
             Differ.set Differ.string
 
         fuzzer =
-            setFuzzer F.string
+            setFuzzer Fuzz.string
     in
     fuzzTest fuzzer differ "set"
 
@@ -82,7 +143,7 @@ listTest () =
             Differ.list Differ.string
 
         fuzzer =
-            F.list F.string
+            Fuzz.list Fuzz.string
     in
     fuzzTest fuzzer differ "list"
 
@@ -97,10 +158,10 @@ productTest () =
                 |> Differ.andMap .c Differ.bool
 
         fuzzer =
-            F.map3 (\a b c -> { a = a, b = b, c = c })
-                F.bool
-                F.bool
-                F.bool
+            Fuzz.map3 (\a b c -> { a = a, b = b, c = c })
+                Fuzz.bool
+                Fuzz.bool
+                Fuzz.bool
     in
     fuzzTest fuzzer differ "product"
 
@@ -118,12 +179,12 @@ complexTest () =
                 )
 
         fuzzer =
-            F.listOfLengthBetween 0
+            Fuzz.listOfLengthBetween 0
                 16
-                (F.map3 (\a b c -> { a = a, b = b, c = c })
-                    (dictFuzzer F.int (F.floatRange 0.0 1.0))
-                    (setFuzzer F.char)
-                    (F.map (\x -> { x = x }) F.string)
+                (Fuzz.map3 (\a b c -> { a = a, b = b, c = c })
+                    (dictFuzzer Fuzz.int Fuzz.niceFloat)
+                    (setFuzzer Fuzz.char)
+                    (Fuzz.map (\x -> { x = x }) Fuzz.string)
                 )
     in
     fuzzTest fuzzer differ "complex"
@@ -134,6 +195,7 @@ type Custom
     | B String
 
 
+customTest : () -> Test
 customTest () =
     let
         differ =
@@ -151,9 +213,9 @@ customTest () =
                 |> Differ.endCustom
 
         fuzzer =
-            F.oneOf
-                [ F.map A F.int
-                , F.map B F.string
+            Fuzz.oneOf
+                [ Fuzz.map A Fuzz.int
+                , Fuzz.map B Fuzz.string
                 ]
     in
     fuzzTest fuzzer differ "custom"
@@ -165,19 +227,24 @@ customTest () =
 
 dictFuzzer : Fuzzer comparable -> Fuzzer v -> Fuzzer (Dict.Dict comparable v)
 dictFuzzer k v =
-    F.listOfLengthBetween 0 16 (F.pair k v)
-        |> F.map Dict.fromList
+    Fuzz.listOfLengthBetween 0 16 (Fuzz.pair k v)
+        |> Fuzz.map Dict.fromList
 
 
 setFuzzer : Fuzzer comparable -> Fuzzer (Set.Set comparable)
 setFuzzer m =
-    F.listOfLengthBetween 0 16 m
-        |> F.map Set.fromList
+    Fuzz.listOfLengthBetween 0 16 m
+        |> Fuzz.map Set.fromList
+
+
+myNiceFloat : Fuzzer Float
+myNiceFloat =
+    Fuzz.floatRange -10000000 10000000
 
 
 fuzzTest : Fuzzer b -> Differ.Differ b -> String -> Test
 fuzzTest fuzzer differ name =
-    fuzz2 fuzzer fuzzer name <|
+    Test.fuzz2 fuzzer fuzzer name <|
         \old new ->
             let
                 diff =

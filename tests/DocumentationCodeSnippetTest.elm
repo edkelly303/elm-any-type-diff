@@ -48,9 +48,9 @@ userDiffer__Readme_0 =
         |> Differ.andMap .hobbies (Differ.list Differ.string)
 
 
-changes__Readme_0 =
+delta__Readme_0 =
     Differ.run userDiffer__Readme_0 oldUser__Readme_0 newUser__Readme_0
 
 
 patchedUser__Readme_0 =
-    Differ.patch userDiffer__Readme_0 changes__Readme_0 oldUser__Readme_0
+    Differ.patch userDiffer__Readme_0 delta__Readme_0 oldUser__Readme_0
