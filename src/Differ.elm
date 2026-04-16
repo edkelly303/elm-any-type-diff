@@ -267,10 +267,12 @@ char =
 
                     _ ->
                         Err FatalError
-        , toString = \c -> "'" ++ String.fromChar c ++ "'"
+        , toString = \c -> String.fromList [ '\'', c, '\'' ]
         , parser =
-            Parser.chompIf (always True)
-                |> Parser.getChompedString
+            Parser.succeed identity
+                |. Helpers.chompOnly '\''
+                |= (Parser.chompIf (always True) |> Parser.getChompedString)
+                |. Helpers.chompOnly '\''
                 |> Parser.andThen
                     (\str ->
                         case String.uncons str of

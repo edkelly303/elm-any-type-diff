@@ -33,7 +33,7 @@ suite =
 
 floatParserTest : () -> Test
 floatParserTest () =
-    Test.fuzz Fuzz.niceFloat "float parser" <|
+    Test.fuzz Fuzz.float "float parser" <|
         \flt ->
             let
                 fs =
@@ -42,10 +42,24 @@ floatParserTest () =
                 str =
                     fs.toString flt
             in
-            ( str
-            , Parser.run fs.parser str
-            )
-                |> Expect.equal ( str, Ok flt )
+            case Parser.run fs.parser str of
+                Ok output ->
+                    expectEqualOrNaN flt output
+
+                Err _ ->
+                    Expect.fail "Parser failure"
+
+
+expectEqualOrNaN : Float -> Float -> Expect.Expectation
+expectEqualOrNaN float1 float2 =
+    if isNaN float1 && isNaN float2 then
+        Expect.pass
+
+    else if float1 == float2 then
+        Expect.pass
+
+    else
+        Expect.fail "input /= output"
 
 
 stringParserTest : () -> Test
@@ -157,12 +171,12 @@ dictWithTupleKeysTest () =
             Differ.dict
                 (Differ.pure Tuple.pair
                     |> Differ.andMap Tuple.first Differ.int
-                    |> Differ.andMap Tuple.second Differ.float
+                    |> Differ.andMap Tuple.second Differ.char
                 )
                 Differ.string
 
         fuzzer =
-            dictFuzzer (Fuzz.pair Fuzz.int Fuzz.niceFloat) Fuzz.string
+            dictFuzzer (Fuzz.pair Fuzz.int Fuzz.char) Fuzz.string
     in
     fuzzTest fuzzer differ "dictWithTupleKeys"
 
@@ -174,7 +188,21 @@ intTest () =
 
 floatTest : () -> Test
 floatTest () =
-    fuzzTest Fuzz.niceFloat Differ.float "float"
+    Test.fuzz2 Fuzz.float Fuzz.float "float" <|
+        \old new ->
+            let
+                diff =
+                    Differ.run Differ.float old new
+            in
+            case Differ.patch Differ.float diff old of
+                Ok output ->
+                    expectEqualOrNaN new output
+
+                Err Differ.MismatchedDelta ->
+                    Expect.fail "Mismatched delta"
+
+                Err Differ.FatalError ->
+                    Expect.fail "Fatal error"
 
 
 charTest : () -> Test
@@ -235,7 +263,7 @@ complexTest () =
         differ =
             Differ.list
                 (Differ.pure (\a b c d -> { a = a, b = b, c = c, d = d })
-                    |> Differ.andMap .a (Differ.dict Differ.int Differ.float)
+                    |> Differ.andMap .a (Differ.dict Differ.int Differ.string)
                     |> Differ.andMap .b (Differ.set Differ.char)
                     |> Differ.andMap .c
                         (Differ.map .x (\x -> { x = x }) Differ.string)
@@ -246,7 +274,7 @@ complexTest () =
             Fuzz.listOfLengthBetween 0
                 16
                 (Fuzz.map4 (\a b c d -> { a = a, b = b, c = c, d = d })
-                    (dictFuzzer Fuzz.int Fuzz.niceFloat)
+                    (dictFuzzer Fuzz.int Fuzz.string)
                     (setFuzzer Fuzz.char)
                     (Fuzz.map (\x -> { x = x }) Fuzz.string)
                     customFuzzer

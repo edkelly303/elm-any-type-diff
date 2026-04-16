@@ -20,7 +20,10 @@ values produced by `String.fromFloat`.
 floatParser : Parser Float
 floatParser =
     Parser.oneOf
-        [ Parser.succeed negate
+        [ Parser.token "Infinity" |> Parser.map (\_ -> 1/0)
+        , Parser.token "-Infinity" |> Parser.map (\_ -> -1/0)
+        , Parser.token "NaN" |> Parser.map (\_ -> 0/0)
+        , Parser.succeed negate
             |. Parser.symbol "-"
             |= floatParserHelp
         , floatParserHelp
