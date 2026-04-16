@@ -33,7 +33,7 @@ suite =
 
 floatParserTest : () -> Test
 floatParserTest () =
-    Test.fuzz myNiceFloat "float parser" <|
+    Test.fuzz Fuzz.niceFloat "float parser" <|
         \flt ->
             let
                 fs =
@@ -162,7 +162,7 @@ dictWithTupleKeysTest () =
                 Differ.string
 
         fuzzer =
-            dictFuzzer (Fuzz.pair Fuzz.int myNiceFloat) Fuzz.string
+            dictFuzzer (Fuzz.pair Fuzz.int Fuzz.niceFloat) Fuzz.string
     in
     fuzzTest fuzzer differ "dictWithTupleKeys"
 
@@ -174,7 +174,7 @@ intTest () =
 
 floatTest : () -> Test
 floatTest () =
-    fuzzTest myNiceFloat Differ.float "float"
+    fuzzTest Fuzz.niceFloat Differ.float "float"
 
 
 charTest : () -> Test
@@ -303,11 +303,6 @@ setFuzzer : Fuzzer comparable -> Fuzzer (Set.Set comparable)
 setFuzzer m =
     Fuzz.listOfLengthBetween 0 16 m
         |> Fuzz.map Set.fromList
-
-
-myNiceFloat : Fuzzer Float
-myNiceFloat =
-    Fuzz.floatRange -10000000 10000000
 
 
 fuzzTest : Fuzzer b -> Differ.Differ b -> String -> Test

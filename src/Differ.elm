@@ -309,13 +309,7 @@ float =
                     _ ->
                         Err FatalError
         , toString = String.fromFloat
-        , parser =
-            Parser.oneOf
-                [ Parser.succeed negate
-                    |. Parser.symbol "-"
-                    |= Parser.float
-                , Parser.float
-                ]
+        , parser = Helpers.floatParser
         }
 
 
