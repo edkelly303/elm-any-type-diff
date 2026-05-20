@@ -1,3 +1,7 @@
+# !! DEPRECATED !!
+
+Please use https://github.com/edkelly303/elm-ir instead, it's a much better project than this one.
+
 # Any type diff
 
 ## What?
